@@ -1,4 +1,5 @@
 import type { AnalysisResult, CVData, Lang } from '../types';
+import { splitList } from './cvText';
 import { cvLang } from './design';
 import { uid } from './sample';
 
@@ -7,7 +8,8 @@ import { uid } from './sample';
 // certifications, languages) always stay exactly as the user entered them.
 
 const toLines = (s: string) => s.split('\n').map((l) => l.replace(/^[-•*▪●]\s*/, '').trim()).filter(Boolean);
-const toList = (s: string) => s.split(/[,،;\n]/).map((x) => x.trim()).filter(Boolean);
+// Bracket-aware, so a skill like "SQL / NoSQL (MySQL, Database Design)" reaches the AI in one piece.
+const toList = (s: string) => splitList(s);
 
 function cvForPrompt(cv: CVData) {
   return {

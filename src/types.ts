@@ -14,6 +14,8 @@ export interface Personal {
   email: string;
   phone: string;
   location: string;
+  /** Common on Gulf CVs, discouraged in the US/EU — the report treats it accordingly. */
+  nationality: string;
   linkedin: string;
   website: string;
 }

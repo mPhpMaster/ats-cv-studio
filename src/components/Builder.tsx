@@ -353,6 +353,7 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
               <Field label={b.email} type="email" dir="ltr" value={cv.personal.email} onChange={(v) => setPersonal('email', v)} />
               <Field label={b.phone} dir="ltr" value={cv.personal.phone} onChange={(v) => setPersonal('phone', v)} placeholder="+1 555 123 4567" />
               <Field label={b.location} value={cv.personal.location} onChange={(v) => setPersonal('location', v)} />
+              <Field label={b.nationality} value={cv.personal.nationality ?? ''} onChange={(v) => setPersonal('nationality', v)} placeholder={b.nationalityPlaceholder} />
               <Field label={b.linkedin} dir="ltr" value={cv.personal.linkedin} onChange={(v) => setPersonal('linkedin', v)} placeholder="linkedin.com/in/your-name" />
               <Field label={b.website} dir="ltr" value={cv.personal.website} onChange={(v) => setPersonal('website', v)} />
             </div>

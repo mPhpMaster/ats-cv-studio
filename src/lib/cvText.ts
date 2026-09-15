@@ -2,13 +2,38 @@ import { messages } from '../i18n';
 import type { CVData } from '../types';
 import { cvLang } from './design';
 
-export const splitList = (s: string) => s.split(/[,،\n]/).map((x) => x.trim()).filter(Boolean);
+/**
+ * Split a comma/newline list, but keep separators that sit inside brackets:
+ * "SQL / NoSQL (MySQL, Database Design)" is one skill, not two.
+ */
+export const splitList = (s: string) => {
+  const out: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of s) {
+    if ('([{'.includes(ch)) depth++;
+    else if (')]}'.includes(ch)) depth = Math.max(0, depth - 1);
+    else if (depth === 0 && (ch === ',' || ch === '،' || ch === ';' || ch === '\n')) {
+      out.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  out.push(current);
+  return out.map((x) => x.trim()).filter(Boolean);
+};
 export const splitLines = (s: string) => s.split('\n').map((x) => x.replace(/^[-•*]\s*/, '').trim()).filter(Boolean);
 export const dateRange = (a: string, b: string) => [a, b].filter(Boolean).join(' – ');
 
 export function contactItems(cv: CVData): string[] {
   const p = cv.personal;
-  return [p.email, p.phone, p.location, p.linkedin, p.website].map((x) => x.trim()).filter(Boolean);
+  const h = messages[cvLang(cv)].cv;
+  // Labelled, so "Syrian" cannot be mistaken for a city. Older saved CVs have no nationality field at all.
+  const nationality = (p.nationality ?? '').trim();
+  return [p.email, p.phone, p.location, nationality ? `${h.nationality}: ${nationality}` : '', p.linkedin, p.website]
+    .map((x) => (x ?? '').trim())
+    .filter(Boolean);
 }
 
 export const contactLine = (cv: CVData) => contactItems(cv).join(' | ');

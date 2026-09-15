@@ -52,6 +52,8 @@ export const en = {
     email: 'Email',
     phone: 'Phone',
     location: 'City, Country',
+    nationality: 'Nationality (optional)',
+    nationalityPlaceholder: 'Usually expected in the Gulf, best left off for the US/EU',
     linkedin: 'LinkedIn URL',
     website: 'Website / Portfolio',
     summary: 'Professional summary',
@@ -330,6 +332,7 @@ export const en = {
   /** Headings printed inside the CV itself (chosen by the CV language, not the UI language). */
   cv: {
     yourName: 'Your Name',
+    nationality: 'Nationality',
     summary: 'Professional Summary',
     experience: 'Work Experience',
     education: 'Education',

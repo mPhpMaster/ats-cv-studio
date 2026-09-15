@@ -418,7 +418,9 @@ export function analyzeCV(cvText: string, jobDescription: string, source: Source
     const idx = (k: string) => order.indexOf(k);
     if (idx('summary') > -1 && idx('experience') > -1 && idx('summary') > idx('experience')) items.push(t.summaryAfterExperience);
     if (idx('education') > -1 && idx('experience') > -1 && idx('education') < idx('experience') && (years ?? 0) >= 2) items.push(t.educationFirst);
-    if (ranges.slice(1).some((r, i) => toMonths(r.start) > toMonths(ranges[i].start))) items.push(t.rolesOrder);
+    // Compare END dates: a CV is reverse-chronological by when each role ended. Start dates legitimately
+    // zig-zag when part-time or freelance work ran concurrently with a longer main role.
+    if (ranges.slice(1).some((r, i) => toMonths(r.end) > toMonths(ranges[i].end))) items.push(t.rolesOrder);
     add('sectionsOrder', 'sections', 5, 1 - items.length * 0.35, t.orderOk, t.orderTip, items);
   }
 
@@ -531,7 +533,12 @@ export function analyzeCV(cvText: string, jobDescription: string, source: Source
   }
   {
     const items: string[] = [];
-    const other = personalKeys.filter((k) => !['dob', 'age', 'photo'].includes(k));
+    // Nationality is expected on Gulf CVs and routinely asked for, so it is not a red flag there.
+    // It stays flagged for CVs aimed elsewhere, where recruiters are told to leave it off.
+    const GULF_RE = /saudi|ksa|riyadh|jeddah|dammam|khobar|uae|emirat|dubai|abu ?dhabi|sharjah|qatar|doha|kuwait|bahrain|manama|oman|muscat|السعوديه|الرياض|جده|الامارات|دبي|ابوظبي|الشارقه|قطر|الدوحه|الكويت|البحرين|عمان|مسقط/i;
+    const gulfTargeted = arabic || GULF_RE.test(foldArabic(normalize(structured.personal.location ?? '')));
+    const allowed = gulfTargeted ? ['dob', 'age', 'photo', 'nationality'] : ['dob', 'age', 'photo'];
+    const other = personalKeys.filter((k) => !allowed.includes(k));
     if (other.length) items.push(t.personalFound(list(other.map((k) => t.personalNames[k]))));
     if (!isBuilder && ((source.images ?? 0) > 0 || personalKeys.includes('photo'))) items.push(t.photoFound);
     add('personalDetails', 'discrimination', 5, 1 - items.length * 0.45, t.personalOk, t.personalTip, items);
@@ -559,7 +566,11 @@ export function analyzeCV(cvText: string, jobDescription: string, source: Source
   {
     const items: string[] = [];
     const evidence = makeMatcher([...(sections.get('experience') ?? []), ...(sections.get('projects') ?? []), summaryText].join('\n'));
-    const unsupported = skills.filter((s) => !evidence(s));
+    // A compound entry such as "PHP / Laravel" or "SQL / NoSQL (MySQL, Database Design)" never appears
+    // verbatim in a bullet, so match its parts too — otherwise every grouped skill reads as unsupported.
+    const skillParts = (s: string) => s.split(/\s*[/&]\s*|\s*[(),]\s*/).map((p) => p.trim()).filter((p) => p.length > 1);
+    const supported_ = (s: string) => evidence(s) || skillParts(s).some((part) => evidence(part));
+    const unsupported = skills.filter((s) => !supported_(s));
     const supported = skills.length - unsupported.length;
     if (!skills.length) items.push(t.noSkills);
     else if (unsupported.length / skills.length > 0.4) items.push(t.unsupportedSkills(list(unsupported.slice(0, 8))));

@@ -53,6 +53,8 @@ export const ar: Messages = {
     email: 'البريد الإلكتروني',
     phone: 'رقم الهاتف',
     location: 'المدينة، الدولة',
+    nationality: 'الجنسية (اختياري)',
+    nationalityPlaceholder: 'معتادة في الخليج، ويُفضّل حذفها للسير الموجّهة لأمريكا وأوروبا',
     linkedin: 'رابط LinkedIn',
     website: 'الموقع الإلكتروني / معرض الأعمال',
     summary: 'الملخص المهني',
@@ -330,6 +332,7 @@ export const ar: Messages = {
 
   cv: {
     yourName: 'اسمك',
+    nationality: 'الجنسية',
     summary: 'الملخص المهني',
     experience: 'الخبرة العملية',
     education: 'التعليم',
