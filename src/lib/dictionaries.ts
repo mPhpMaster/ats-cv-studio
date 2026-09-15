@@ -137,7 +137,9 @@ export const UNPROFESSIONAL_EMAIL =
 export const SENIORITY_PATTERNS: { level: number; re: RegExp }[] = [
   { level: 6, re: /\b(vp|vice president|chief|cto|ceo|cfo|coo|cio)\b|نائب الرئيس|الرئيس التنفيذي/iu },
   { level: 5, re: /\b(director|head of)\b|رئيس قسم|مدير عام|مدير اداره|مدير ادارة|رئيس ادار/iu },
-  { level: 4, re: /\b(lead|principal|staff|manager|supervisor)\b|قائد|رئيس فريق|(?<!\p{L})مدير|مشرف/iu },
+  // "staff" alone is a junior grade (staff accountant, staff nurse) and is senior only in engineering ladders;
+  // "lead generation" is a marketing job, and a "principal teacher" is not an executive.
+  { level: 4, re: /\b(lead(?!\s+generation)|principal(?!\s+teachers?\b)|staff\s+(?:software\s+)?(?:engineer|scientist|architect|designer|data\s+scientist)|manager|supervisor)\b|قائد|رئيس فريق|(?<!\p{L})مدير|مشرف/iu },
   { level: 3, re: /\b(senior|sr\.?)\b|(?<!\p{L})(اول|اولى|اولي|كبير|كبيره|خبير)(?!\p{L})/iu },
   { level: 1, re: /\b(junior|jr\.?|entry[- ]level|graduate|assistant)\b|مبتدي|حديث التخرج|حديثي التخرج|مساعد/iu },
   { level: 0, re: /\b(intern|internship|trainee)\b|متدرب|تدريب صيفي/iu },

@@ -206,6 +206,24 @@ function providerMessage(detail) {
   return raw.slice(0, 300);
 }
 
+/**
+ * Turns a failed response into a code the UI can explain. The provider's own wording is read before the status
+ * code, because providers disagree on statuses: Anthropic sends 400 for an empty balance and OpenAI 429, Google
+ * sends 400 for a bad key and for an unsupported country, and every provider sends 400 for an oversized request.
+ * On status alone all of those read "check the model name", which was right for none of them.
+ */
+function classifyFailure(status, reason) {
+  if (/credit balance|billing|insufficient (?:funds|quota|credits?)|exceeded your current quota|payment required/i.test(reason) || status === 402) return 'billing';
+  if (/location is not supported|not (?:available|supported) in your (?:country|region)|unsupported[_ ](?:country|region)/i.test(reason)) return 'region';
+  if (/api key not valid|invalid (?:x-)?api[ _-]?key|incorrect api key|api key (?:has )?expired|invalid authentication/i.test(reason)) return 'auth';
+  if (/request too large|too large for|maximum context length|context (?:length|window) (?:exceeded|is)|too many (?:input )?tokens|prompt is too long/i.test(reason) || status === 413) return 'too-large';
+  if (status === 401 || status === 403) return 'auth';
+  if (status === 429) return 'rate-limit';
+  if (status === 404) return 'not-found';
+  if (status === 400 || status === 422) return 'bad-request';
+  return 'http';
+}
+
 function extractText(provider, data) {
   if (!data || typeof data !== 'object') return '';
   if (provider === 'anthropic') {
@@ -262,16 +280,7 @@ async function callAi(options, fetchImpl) {
     let detail = '';
     try { detail = await res.text(); } catch { /* body already consumed or empty */ }
     const reason = providerMessage(detail);
-    // Providers report "out of credit" inconsistently: Anthropic sends 400, OpenAI sends 429, some send 402.
-    // Classifying on the wording keeps the user from being told to check a model name that is perfectly fine.
-    const outOfCredit = /credit balance|billing|insufficient (?:funds|quota|credits?)|exceeded your current quota|payment required/i.test(reason);
-    const error = outOfCredit || res.status === 402 ? 'billing'
-      : res.status === 401 || res.status === 403 ? 'auth'
-        : res.status === 429 ? 'rate-limit'
-          : res.status === 404 ? 'not-found'
-            : res.status === 400 || res.status === 422 ? 'bad-request'
-              : 'http';
-    return { ok: false, error, message: scrub(`${res.status} ${reason}`, apiKey) };
+    return { ok: false, error: classifyFailure(res.status, reason), message: scrub(`${res.status} ${reason}`, apiKey) };
   }
 
   let data = null;
@@ -345,13 +354,7 @@ async function transcribeAudio(options, fetchImpl) {
     // A 404 used to be reported as "this provider has no speech-to-text". Providers that genuinely have
     // none are already refused above, so here it means the model or endpoint name is wrong — and calling
     // that "no such service" sends the user off to configure something they have already configured.
-    const error = /credit balance|billing|insufficient|exceeded your current quota/i.test(reason) ? 'billing'
-      : res.status === 401 || res.status === 403 ? 'auth'
-        : res.status === 429 ? 'rate-limit'
-          : res.status === 404 ? 'not-found'
-            : res.status === 400 || res.status === 422 ? 'bad-request'
-              : 'http';
-    return { ok: false, error, message: scrub(`${res.status} ${reason}`, apiKey) };
+    return { ok: false, error: classifyFailure(res.status, reason), message: scrub(`${res.status} ${reason}`, apiKey) };
   }
 
   let data = null;

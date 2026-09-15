@@ -124,9 +124,20 @@ function buildLines(items: Item[], pageWidth: number, pageRtl: boolean, fixArabi
 }
 
 async function parsePdf(file: File): Promise<ParsedFile> {
-  const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  // pdf.js keeps every parsed page, font and its worker-side document alive until told otherwise; without this
+  // each uploaded or compared PDF stayed in memory for the rest of the session. The loading task is what
+  // destroys it, and destroying the task also covers a file that fails to open.
+  const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
+  try {
+    return await readPdf(await task.promise, file);
+  } finally {
+    void task.destroy();
+  }
+}
+
+async function readPdf(pdf: Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>, file: File): Promise<ParsedFile> {
   const textLines: string[] = [];
-  const columns: PdfColumns[] = [];
+  const pages: { items: Item[]; width: number; pageRtl: boolean; fixLetters: boolean }[] = [];
   let images = 0;
   let rowsTotal = 0;
   let rowsSplit = 0;
@@ -152,20 +163,27 @@ async function parsePdf(file: File): Promise<ParsedFile> {
     rowsTotal += all.rows;
     rowsSplit += all.split;
     textLines.push(...all.lines.map((l) => l.text), '');
-
-    const sidebarEdge = width * 0.33;
-    columns.push({
-      sidebar: buildLines(items.filter((i) => i.x < sidebarEdge), width, pageRtl, fixLetters).lines,
-      main: buildLines(items.filter((i) => i.x >= sidebarEdge), width, pageRtl, fixLetters).lines,
-    });
+    pages.push({ items, width, pageRtl, fixLetters });
 
     const ops = await page.getOperatorList();
     for (const fn of ops.fnArray) {
       if (fn === pdfjs.OPS.paintImageXObject || fn === pdfjs.OPS.paintInlineImageXObject) images++;
     }
+    page.cleanup();
   }
 
   const text = textLines.join('\n');
+  // The sidebar/main split exists only for LinkedIn's own PDF export, which always carries a linkedin.com/in/
+  // link and is refused by parseLinkedInPdf without one. Every other PDF used to be laid out three times per page.
+  const columns: PdfColumns[] = /linkedin\.com\/in\//i.test(text.replace(/\s/g, ''))
+    ? pages.map(({ items, width, pageRtl, fixLetters }) => {
+      const sidebarEdge = width * 0.33;
+      return {
+        sidebar: buildLines(items.filter((i) => i.x < sidebarEdge), width, pageRtl, fixLetters).lines,
+        main: buildLines(items.filter((i) => i.x >= sidebarEdge), width, pageRtl, fixLetters).lines,
+      };
+    })
+    : [];
   return {
     text,
     source: {

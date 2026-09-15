@@ -1,7 +1,7 @@
 {
   "name": "ats-cv-studio",
   "productName": "ATS CV Studio",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Build ATS-friendly CVs and check any CV for ATS compatibility (English & Arabic).",
   "author": "ATS CV Studio",
   "license": "MIT",

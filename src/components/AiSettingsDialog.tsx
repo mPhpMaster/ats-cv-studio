@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n';
 import type { AiProvider, AiSettings, AiSettingsPatch, AiVoiceProvider } from '../lib/download';
 
@@ -66,11 +66,29 @@ export default function AiSettingsDialog({ onClose }: Props) {
     window.desktop?.aiSettingsGet?.().then(setSettings).catch(() => setSettings(null));
   }, []);
 
+  /**
+   * Text fields save on blur, but closing with Escape or a click outside does not blur them in Chromium, so a
+   * model name or endpoint typed and then "closed" was silently lost. What is typed is kept here and saved on
+   * close. Keys are not: a key is saved only with its own Save button.
+   */
+  const pending = useRef<Partial<AiSettingsPatch>>({});
+  const typed = (field: 'model' | 'baseUrl' | 'voiceBaseUrl', value: string) => { pending.current[field] = value; };
+  const close = async () => {
+    const patch = pending.current;
+    pending.current = {};
+    if (Object.keys(patch).length) {
+      try { await window.desktop?.aiSettingsSet?.(patch); } catch { /* the dialog closes regardless */ }
+    }
+    onClose();
+  };
+  const closeRef = useRef(close);
+  closeRef.current = close;
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') void closeRef.current(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
 
   const provider: AiProvider = settings?.provider ?? 'anthropic';
   const voiceProvider: AiVoiceProvider | '' = settings?.voiceProvider ?? '';
@@ -93,11 +111,11 @@ export default function AiSettingsDialog({ onClose }: Props) {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => void close()}>
       <div className="modal ai-modal" role="dialog" aria-modal="true" aria-labelledby="ai-settings-title" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
           <h2 id="ai-settings-title">⚙ {a.settingsTitle}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label={a.cancel}>✕</button>
+          <button className="icon-btn" onClick={() => void close()} aria-label={a.cancel}>✕</button>
         </header>
 
         <div className="modal-body">
@@ -135,7 +153,8 @@ export default function AiSettingsDialog({ onClose }: Props) {
               <span>{a.model}</span>
               {typedModel ? (
                 <input key={`model-${provider}`} type="text" dir="ltr" defaultValue={savedModel}
-                  placeholder={settings?.defaultModel} onBlur={(e) => save({ model: e.target.value })} />
+                  placeholder={settings?.defaultModel} onChange={(e) => typed('model', e.target.value)}
+                  onBlur={(e) => { delete pending.current.model; save({ model: e.target.value }); }} />
               ) : (
                 <select value={selectedModel} onChange={(e) => {
                   if (e.target.value === OTHER_MODEL) setTypeOwnModel(true);
@@ -150,7 +169,8 @@ export default function AiSettingsDialog({ onClose }: Props) {
               <label className="field">
                 <span>{a.endpoint}</span>
                 <input key="chat-base" type="url" dir="ltr" defaultValue={settings?.baseUrl ?? ''}
-                  placeholder="http://localhost:1234" onBlur={(e) => save({ baseUrl: e.target.value })} />
+                  placeholder="http://localhost:1234" onChange={(e) => typed('baseUrl', e.target.value)}
+                  onBlur={(e) => { delete pending.current.baseUrl; save({ baseUrl: e.target.value }); }} />
               </label>
             )}
           </section>
@@ -189,7 +209,8 @@ export default function AiSettingsDialog({ onClose }: Props) {
               <label className="field">
                 <span>{a.endpoint}</span>
                 <input key="voice-base" type="url" dir="ltr" defaultValue={settings?.voiceBaseUrl ?? ''}
-                  placeholder="http://localhost:1234" onBlur={(e) => save({ voiceBaseUrl: e.target.value })} />
+                  placeholder="http://localhost:1234" onChange={(e) => typed('voiceBaseUrl', e.target.value)}
+                  onBlur={(e) => { delete pending.current.voiceBaseUrl; save({ voiceBaseUrl: e.target.value }); }} />
               </label>
             )}
             <p className={settings?.voiceReady ? 'muted small-note' : 'hint'}>
@@ -200,7 +221,7 @@ export default function AiSettingsDialog({ onClose }: Props) {
 
           <p className="muted small-note">{a.keyPrivacy}</p>
           <div className="row-actions">
-            <button className="primary" onClick={onClose}>{a.close}</button>
+            <button className="primary" onClick={() => void close()}>{a.close}</button>
           </div>
         </div>
       </div>

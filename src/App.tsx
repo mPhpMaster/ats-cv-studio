@@ -38,6 +38,8 @@ export default function App() {
   const [importNotice, setImportNotice] = useState<string | null>(null);
   /** The AI connection settings live behind their own button, not buried inside the AI dialogs. */
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** Bumped when an interview's result is applied, so the next visit to that tab begins a new interview. */
+  const [interviewRun, setInterviewRun] = useState(0);
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -102,12 +104,12 @@ export default function App() {
         <div hidden={tab !== 'check'} className="no-print">
           <Checker jobDescription={jobDescription} setJobDescription={setJobDescription} onOpenInBuilder={openInBuilder} />
         </div>
-        {/* Mounted only while open so the interview starts fresh and no microphone is left listening. */}
-        {tab === 'interview' && (
-          <div className="no-print">
-            <InterviewPage cv={cv} jobDescription={jobDescription} onApplied={openInBuilder} />
-          </div>
-        )}
+        {/* Kept mounted like the other tabs: unmounting threw away every answer the moment the user glanced at
+            another tab. It stops its own microphone when hidden, and starts fresh after its result is applied. */}
+        <div hidden={tab !== 'interview'} className="no-print">
+          <InterviewPage key={interviewRun} cv={cv} jobDescription={jobDescription} active={tab === 'interview'}
+            onApplied={(next, source) => { openInBuilder(next, source); setInterviewRun((n) => n + 1); }} />
+        </div>
         {settingsOpen && <AiSettingsDialog onClose={() => setSettingsOpen(false)} />}
       </div>
     </I18nContext.Provider>

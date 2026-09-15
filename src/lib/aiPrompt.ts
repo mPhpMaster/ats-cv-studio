@@ -444,6 +444,15 @@ export function applyAiResponse(original: CVData, reply: string, mode: AiMode = 
   const fill = mode === 'interview';
   /** Keep what the user wrote; take the AI's value only for a field they left empty. */
   const keep = (mine: string, theirs: unknown) => (fill && !mine.trim() ? str(theirs) || mine : mine);
+  // A translation rewrites the translatable text itself. `keep` used to hold every job title, degree and
+  // location in the old language while the bullets around them were translated.
+  const translating = mode === 'translate';
+  const tr = (mine: string, theirs: unknown) => (translating ? str(theirs) || mine : keep(mine, theirs));
+  /**
+   * Contact details a pasted reply carries (a nationality the user told their own assistant, say) fill a field
+   * left blank in every mode — they were dropped by Enhance and Fix. A field already written is never replaced.
+   */
+  const blankOnly = (mine: string, theirs: unknown) => (!mine.trim() ? str(theirs) || mine : mine);
   const extras = (ai: Obj[], matched: (Obj | undefined)[]) => (fill ? ai.filter((a) => !matched.includes(a)) : []);
 
   const personal = d.personal && typeof d.personal === 'object' ? (d.personal as Obj) : {};
@@ -468,14 +477,16 @@ export function applyAiResponse(original: CVData, reply: string, mode: AiMode = 
     personal: {
       ...original.personal,
       title: str(personal.title) || original.personal.title,
-      fullName: keep(original.personal.fullName, personal.fullName),
-      email: keep(original.personal.email, personal.email),
-      phone: keep(original.personal.phone, personal.phone),
-      location: keep(original.personal.location, personal.location),
+      fullName: blankOnly(original.personal.fullName, personal.fullName),
+      email: blankOnly(original.personal.email, personal.email),
+      phone: blankOnly(original.personal.phone, personal.phone),
+      location: translating ? tr(original.personal.location, personal.location) : blankOnly(original.personal.location, personal.location),
       // Older saved CVs predate this field, so it can be undefined on the stored object.
-      nationality: keep(original.personal.nationality ?? '', personal.nationality),
-      linkedin: keep(original.personal.linkedin, personal.linkedin),
-      website: keep(original.personal.website, personal.website),
+      nationality: translating
+        ? tr(original.personal.nationality ?? '', personal.nationality)
+        : blankOnly(original.personal.nationality ?? '', personal.nationality),
+      linkedin: blankOnly(original.personal.linkedin, personal.linkedin),
+      website: blankOnly(original.personal.website, personal.website),
     },
     summary: str(d.summary) || original.summary,
     experience: [
@@ -484,9 +495,9 @@ export function applyAiResponse(original: CVData, reply: string, mode: AiMode = 
         const bullets = lines(a?.bullets);
         return {
           ...e,
-          jobTitle: keep(e.jobTitle, a?.jobTitle),
+          jobTitle: tr(e.jobTitle, a?.jobTitle),
           company: keep(e.company, a?.company),
-          location: keep(e.location, a?.location),
+          location: tr(e.location, a?.location),
           startDate: keep(e.startDate, a?.startDate),
           endDate: keep(e.endDate, a?.endDate),
           bullets: bullets.length ? bullets.join('\n') : e.bullets,
@@ -506,9 +517,9 @@ export function applyAiResponse(original: CVData, reply: string, mode: AiMode = 
         const details = lines(a?.details);
         return {
           ...e,
-          degree: keep(e.degree, a?.degree),
+          degree: tr(e.degree, a?.degree),
           school: keep(e.school, a?.school),
-          location: keep(e.location, a?.location),
+          location: tr(e.location, a?.location),
           startDate: keep(e.startDate, a?.startDate),
           endDate: keep(e.endDate, a?.endDate),
           details: details.length ? details.join('\n') : e.details,
@@ -540,7 +551,7 @@ export function applyAiResponse(original: CVData, reply: string, mode: AiMode = 
         .filter((a) => str(a.name))
         .map((a) => ({ id: uid(), name: str(a.name), link: str(a.link), description: lines(a.description).join('\n') })),
     ],
-    languages: keep(original.languages, list(d.languages).join(sep)),
+    languages: tr(original.languages, list(d.languages).join(sep)),
   };
   return { cv, notes: lines(d.notes), warnings };
 }

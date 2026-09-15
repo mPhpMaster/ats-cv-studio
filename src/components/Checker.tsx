@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState, type DragEvent } from 'react';
+import { useDeferredValue, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useI18n } from '../i18n';
 import { analyzeCV, type SourceInfo } from '../lib/analyzer';
-import { hasContent, parseCVText } from '../lib/cvParser';
+import { droppedSections, hasContent, parseCVText } from '../lib/cvParser';
 import { cvToText } from '../lib/cvText';
 import { buildJobDescriptionPrompt, JOB_PRESETS } from '../lib/jobPresets';
 import { useSpellChecker } from '../lib/spell';
@@ -152,13 +152,17 @@ export default function Checker({ jobDescription, setJobDescription, onOpenInBui
   const compareInput = useRef<HTMLInputElement>(null);
   const [aiFix, setAiFix] = useState(false);
 
+  // Two full analyses (the CV as pasted, and as rebuilt) ran on every keystroke in the paste box. Deferred, the
+  // typing stays immediate and an analysis still pending when the next key arrives is simply dropped.
+  const reportText = useDeferredValue(text);
+  const reportJob = useDeferredValue(jobDescription);
   const result = useMemo(
-    () => (text.trim() || source.fileName
-      ? analyzeCV(text, jobDescription, source, { lang, linkedin: compare?.cv, spell })
+    () => (reportText.trim() || source.fileName
+      ? analyzeCV(reportText, reportJob, source, { lang, linkedin: compare?.cv, spell })
       : null),
-    [text, jobDescription, source, lang, compare, spell],
+    [reportText, reportJob, source, lang, compare, spell],
   );
-  const rebuilt = useMemo(() => (text.trim() ? linkedinCV ?? parseCVText(text) : null), [text, linkedinCV]);
+  const rebuilt = useMemo(() => (reportText.trim() ? linkedinCV ?? parseCVText(reportText) : null), [reportText, linkedinCV]);
   /** Open findings in the uploaded CV — drives the "Fix issues with AI" button. */
   const openIssues = useMemo(
     () => (result ? result.checks.filter((c) => c.severity === 'warn' || c.severity === 'fail').length : 0),
@@ -166,9 +170,9 @@ export default function Checker({ jobDescription, setJobDescription, onOpenInBui
   );
   const rebuiltScore = useMemo(
     () => (rebuilt && hasContent(rebuilt)
-      ? analyzeCV(cvToText(rebuilt), jobDescription, { kind: 'builder' }, { lang, cv: rebuilt, linkedin: compare?.cv, spell }).score
+      ? analyzeCV(cvToText(rebuilt), reportJob, { kind: 'builder' }, { lang, cv: rebuilt, linkedin: compare?.cv, spell }).score
       : null),
-    [rebuilt, jobDescription, lang, compare, spell],
+    [rebuilt, reportJob, lang, compare, spell],
   );
 
   const errorMessage = (e: unknown) => {
@@ -238,7 +242,7 @@ export default function Checker({ jobDescription, setJobDescription, onOpenInBui
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <input type="file" accept=".pdf,.docx,.txt,.doc,image/*" hidden
+            <input type="file" accept=".pdf,.docx,.txt,.doc,image/*" className="file-input"
               onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleFile(f); }} />
             <strong>{loading ? t.checker.reading : source.fileName ?? t.checker.drop}</strong>
             {!result && <span className="muted">{t.checker.localNote}</span>}
@@ -309,7 +313,11 @@ export default function Checker({ jobDescription, setJobDescription, onOpenInBui
               rebuilt={rebuilt}
               before={result.score}
               after={rebuiltScore}
-              onOpen={() => onOpenInBuilder(rebuilt, source.fileName ?? t.report.original)}
+              onOpen={() => {
+                const dropped = droppedSections(reportText);
+                const left = dropped.length ? ` — ${t.importer.notImported(dropped.map((s) => t.importer.sectionNames[s]).join(lang === 'ar' ? '، ' : ', '))}` : '';
+                onOpenInBuilder(rebuilt, `${source.fileName ?? t.report.original}${left}`);
+              }}
             />
           ) : undefined}
         />

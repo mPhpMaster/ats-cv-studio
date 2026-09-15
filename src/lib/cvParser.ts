@@ -287,7 +287,9 @@ export function parseCVText(raw: string): CVData {
   // Nationality is written as a labelled item ("Nationality: Palestinian"), and `segments` above strips that
   // label — so it has to be read from the head before the label is thrown away, or importing loses it.
   const NATIONALITY_RE = /^(?:nationality|الجنسية|الجنسيه)\s*[:：]\s*(.+)$/iu;
+  // It is also often listed under a "Personal Details" heading, which is routed to the contact section.
   p.nationality = head
+    .concat(sections.get('contact') ?? [])
     .flatMap((l) => l.split(/\s*[|•·▪◦]\s*|\t|\s{3,}/))
     .map((s) => clean(s).match(NATIONALITY_RE)?.[1] ?? '')
     .find(Boolean) ?? '';
@@ -301,6 +303,17 @@ export function parseCVText(raw: string): CVData {
   cv.certifications = toCerts(sections.get('certifications') ?? []);
   cv.projects = toProjects(sections.get('projects') ?? []);
   return cv;
+}
+
+/** Sections the CV has no field for; their headings are recognised, so their lines would otherwise vanish unseen. */
+const UNMAPPED_SECTIONS = ['awards', 'volunteer', 'publications'] as const;
+export type UnmappedSection = (typeof UNMAPPED_SECTIONS)[number];
+
+/** Which of those sections a CV text contains with actual content, so an import can say what it left behind. */
+export function droppedSections(raw: string): UnmappedSection[] {
+  const lines = lightNormalize(raw.replace(/\r/g, '')).split('\n').map((l) => l.trim()).filter(Boolean);
+  const { sections } = splitSections(lines);
+  return UNMAPPED_SECTIONS.filter((s) => (sections.get(s) ?? []).some((l) => l.trim()));
 }
 
 export function hasContent(cv: CVData): boolean {

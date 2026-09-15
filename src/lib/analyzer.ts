@@ -44,7 +44,10 @@ const ICON_FONT_RE = /[-]/g; // private-use glyphs produced by icon fonts
 const EMOJI_RE = /\p{Extended_Pictographic}/gu;
 const FANCY_RE = /[★☆◆◇❖✦✧⇒→←↔♦♠♣♥☎✉⌂⚑۞]/g;
 const FIRST_PERSON_EN = /\b(I|[Mm]e|[Mm]y|[Mm]ine|[Mm]yself)\b(?![.'’-])/g;
-const FIRST_PERSON_AR = /(?<!\p{L})و?(انا|لدي|عملت|قمت|اعمل|امتلك|اسعي|ارغب|اهدف|خبرتي|مهاراتي)(?!\p{L})/gu;
+// «لديّ» (I have) is checked apart from the rest, on text where ى is NOT folded into ي: folding turned
+// «لدى» (at, as in «خبرة لدى شركة أرامكو») into «لدي» and counted it as a first-person pronoun.
+const HAVE_AR = /(?<!\p{L})و?لدي(?!\p{L})/gu;
+const FIRST_PERSON_AR = /(?<!\p{L})و?(انا|عملت|قمت|اعمل|امتلك|اسعي|ارغب|اهدف|خبرتي|مهاراتي)(?!\p{L})/gu;
 const TEAM_SIZE_RE =
   /team of \d+|\d+\s*(?:engineers|developers|people|staff|employees|members|direct reports|reports|agents)|فريق(?:ا)?\s+(?:من|يضم)\s+\d+|\d+\s*(?:موظف|موظفين|مهندس|مهندسين|مطور|مطورين|اعضاء|أعضاء)/iu;
 
@@ -93,7 +96,9 @@ const fmtYM = (d: YM) => formatYM(d);
 // The Latin names are anchored on word boundaries: unanchored, "oman" matched inside Romania and Woman,
 // which told the report a Bucharest CV was Gulf-targeted — and, since the interview shares this rule, asked
 // that user for a nationality the same report would have penalised them for.
-const GULF_RE = /\b(?:saudi|ksa|riyadh|jeddah|dammam|khobar|uae|emirat[a-z]*|dubai|abu ?dhabi|sharjah|qatar|doha|kuwait|bahrain|manama|oman|muscat)\b|السعوديه|الرياض|جده|الامارات|دبي|ابوظبي|الشارقه|قطر|الدوحه|الكويت|البحرين|عمان|مسقط/i;
+const GULF_RE = /\b(?:saudi|ksa|riyadh|jeddah|dammam|khobar|uae|emirat[a-z]*|dubai|abu ?dhabi|sharjah|qatar|doha|kuwait|bahrain|manama|oman|muscat)\b|السعوديه|الرياض|جده|الامارات|دبي|ابوظبي|الشارقه|قطر|الدوحه|الكويت|البحرين|سلطنه عمان|مسقط|صلاله/i;
+// A bare «عمان» is deliberately absent: without diacritics it is both Oman (عُمان) and Amman (عَمّان), and as a
+// location line it is far more often the Jordanian capital. «سلطنة عمان», مسقط, صلالة and the Latin "Oman" still count.
 
 /**
  * Whether a CV is aimed at the Gulf, where nationality is routinely asked for and carries no penalty.
@@ -324,9 +329,14 @@ export function analyzeCV(cvText: string, jobDescription: string, source: Source
         .replace(/(?:https?:\/\/)?(?:www\.)?[\w-]+(?:\.[\w-]+)+\S*/g, ' ');
       const allow = new Set(normalize(jobDescription).match(/[a-z]+/g) ?? []);
       const bad: string[] = [];
+      // Every distinct word is looked up once. `bad.includes` scanned the list for each word, and a repeated
+      // word went back to the dictionary every time — quadratic on a long CV, and it ran on every keystroke.
+      const checked = new Set<string>();
       const consider = (raw: string) => {
         const w = raw.replace(/['’]s$/, '').replace(/['’]$/, '');
-        if (w.length < 3 || allow.has(w.toLowerCase()) || bad.includes(w) || spell.correct(w) || spell.correct(w.toLowerCase())) return;
+        if (w.length < 3 || checked.has(w)) return;
+        checked.add(w);
+        if (allow.has(w.toLowerCase()) || spell.correct(w) || spell.correct(w.toLowerCase())) return;
         bad.push(w);
       };
       // Lowercase words anywhere (capitalized words are usually names, companies or products)…
@@ -361,7 +371,8 @@ export function analyzeCV(cvText: string, jobDescription: string, source: Source
     }
     const lowerI = (text.match(/(?<![\p{L}\p{N}'’.-])i(?![\p{L}\p{N}'’.-])/gu) ?? []).length;
     if (lowerI) { issues++; items.push(t.lowercaseI(lowerI)); }
-    const pronouns = (text.match(FIRST_PERSON_EN) ?? []).length + (folded.match(FIRST_PERSON_AR) ?? []).length;
+    const pronouns = (text.match(FIRST_PERSON_EN) ?? []).length + (folded.match(FIRST_PERSON_AR) ?? []).length
+      + (normalize(text).replace(/[یئ]/g, 'ي').match(HAVE_AR) ?? []).length;
     if (pronouns) { issues++; items.push(t.pronouns(pronouns)); }
     if (arabic) {
       const latinCommas = (cvText.match(/\p{Script=Arabic}\s*,\s*\p{Script=Arabic}/gu) ?? []).length;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useI18n } from '../i18n';
 import { analyzeCV, leadingActionVerb } from '../lib/analyzer';
 import { gapLines, type AiMode } from '../lib/aiPrompt';
@@ -8,6 +8,7 @@ import { ACCENTS, FONTS, TEMPLATES, cvLang, getDesign } from '../lib/design';
 import { WEAK_FIXES } from '../lib/dictionaries';
 import { downloadBlob, savePdf } from '../lib/download';
 import { emptyCV, sampleCV, uid } from '../lib/sample';
+import { hasContent } from '../lib/cvParser';
 import { useSpellChecker } from '../lib/spell';
 import type { Certification, CheckFix, CVData, Design, Education, Experience, Lang, Personal, Project } from '../types';
 import AiEnhanceDialog from './AiEnhanceDialog';
@@ -57,8 +58,11 @@ function Area({ label, value, onChange, placeholder, rows = 4, children }: {
 }
 
 function Panel({ title, children, defaultOpen = true, count }: { title: string; children: ReactNode; defaultOpen?: boolean; count?: number }) {
+  // Read once: `defaultOpen` can be live (the target-job panel passes `!jobDescription`), and binding it
+  // directly closed that panel under the cursor on the first character typed.
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <details className="panel" open={defaultOpen}>
+    <details className="panel" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary>{title}{count !== undefined && <span className="count">{count}</span>}</summary>
       <div className="panel-body">{children}</div>
     </details>
@@ -124,10 +128,15 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
   const spell = useSpellChecker();
   const lang = cvLang(cv);
   const design = getDesign(cv);
-  const text = useMemo(() => cvToText(cv), [cv]);
+  // The full analysis runs hundreds of pattern scans over the whole CV. Fed the live values it ran inside every
+  // keystroke; deferred, React paints the typed character first and drops a pending analysis when more typing
+  // arrives. The report trails the editor by a moment instead of the editor trailing the fingers.
+  const reportCv = useDeferredValue(cv);
+  const reportJob = useDeferredValue(jobDescription);
+  const text = useMemo(() => cvToText(reportCv), [reportCv]);
   const result = useMemo(
-    () => analyzeCV(text, jobDescription, { kind: 'builder' }, { lang: uiLang, cv, spell }),
-    [text, jobDescription, uiLang, cv, spell],
+    () => analyzeCV(text, reportJob, { kind: 'builder' }, { lang: uiLang, cv: reportCv, spell }),
+    [text, reportJob, uiLang, reportCv, spell],
   );
   /** Open report issues — drives the "Fix issues with AI" button. */
   const openIssues = useMemo(
@@ -135,7 +144,7 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
     [result],
   );
   /** What the CV is still missing — drives the "Complete with AI questions" button. */
-  const gaps = useMemo(() => gapLines(cv, uiLang), [cv, uiLang]);
+  const gaps = useMemo(() => gapLines(reportCv, uiLang), [reportCv, uiLang]);
 
   /** Apply a spelling fix everywhere it appears in the CV (whole words only). */
   const applyFix = ({ from, to }: CheckFix) => {
@@ -328,7 +337,7 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
             🎤 {b.aiInterview}{gaps.length ? ` (${gaps.length})` : ''}
           </button>
           <button className="ai-btn" onClick={onOpenInterview}>🗨 {t.interview.tab}</button>
-          <button onClick={() => setCv(sampleCV(lang))}>{b.loadSample}</button>
+          <button onClick={() => (!hasContent(cv) || confirm(b.confirmSample)) && setCv(sampleCV(lang))}>{b.loadSample}</button>
           <button onClick={() => confirm(b.confirmClear) && setCv({ ...emptyCV(lang), design: cv.design })}>{b.newBlank}</button>
           <button title="Ctrl+S" onClick={saveJson}>{b.saveJson}</button>
         </div>

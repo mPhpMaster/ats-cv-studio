@@ -97,7 +97,9 @@ function cookiesFromBuffer(sql, buffer, aesKey) {
   try {
     const stmt = db.prepare(
       "SELECT host_key, name, encrypted_value, value, path, expires_utc, is_secure, is_httponly, samesite " +
-        "FROM cookies WHERE host_key LIKE '%linkedin.com'",
+        // Exactly linkedin.com and its subdomains: a bare suffix match also took cookies of any site whose
+        // name merely ends that way (notlinkedin.com).
+        "FROM cookies WHERE host_key IN ('linkedin.com', '.linkedin.com') OR host_key LIKE '%.linkedin.com'",
     );
     const cookies = [];
     while (stmt.step()) {

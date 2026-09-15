@@ -11,6 +11,8 @@ interface Props {
   cv: CVData;
   jobDescription: string;
   onApplied: (cv: CVData, source: string) => void;
+  /** False while another tab is showing: the page stays mounted so answers survive, but the microphone stops. */
+  active?: boolean;
 }
 
 /**
@@ -63,7 +65,7 @@ function parseProgress(question: string): { done: number; total: number } | null
  * The interview on its own page: the assistant asks, the user answers by typing, by voice, or by tapping
  * one of the options the assistant offered, and the app carries the conversation.
  */
-export default function InterviewPage({ cv, jobDescription, onApplied }: Props) {
+export default function InterviewPage({ cv, jobDescription, onApplied, active = true }: Props) {
   const { t, lang } = useI18n();
   const v = t.interview;
   const spell = useSpellChecker();
@@ -139,7 +141,9 @@ export default function InterviewPage({ cv, jobDescription, onApplied }: Props) 
     try {
       const res = await window.desktop!.aiChat!(history);
       if (!res.ok) {
-        setError(v.error);
+        // The code says what to do about it: an empty balance used to read "could not reach the AI", which sent
+        // people checking their internet connection.
+        setError((t.ai.aiErrors as Record<string, string>)[res.error] ?? v.error);
         setErrorDetail(res.message ?? res.error);
         return;
       }
@@ -220,6 +224,11 @@ export default function InterviewPage({ cv, jobDescription, onApplied }: Props) 
     } catch { /* not running */ }
   }
 
+  // Leaving the tab never leaves a microphone listening in the background; what was said is still transcribed.
+  useEffect(() => {
+    if (!active && recorder.current?.state === 'recording') stopListening();
+  }, [active]);
+
   /** Sends the finished recording to the provider and drops the transcription into the answer box. */
   async function transcribe(blob: Blob) {
     setMicDetail('');
@@ -236,8 +245,9 @@ export default function InterviewPage({ cv, jobDescription, onApplied }: Props) 
         setMicNote(res.error === 'no-transcription' || res.error === 'bad-provider' ? v.micNoProvider
           : res.error === 'no-key' || res.error === 'no-base-url' ? v.micNeedsVoiceKey
             : res.error === 'not-found' ? v.micNotFound
-              : res.error === 'bad-base-url' ? t.ai.aiErrors['bad-base-url']
-              : res.error === 'empty' ? v.micNothing : v.micFailed);
+              : res.error === 'empty' ? v.micNothing
+                // A rejected key, an empty balance or a dead connection is not a failed recording.
+                : (t.ai.aiErrors as Record<string, string>)[res.error] ?? v.micFailed);
         // Already scrubbed of the API key in the main process, so it is safe to show.
         setMicDetail(res.message ?? '');
         return;
