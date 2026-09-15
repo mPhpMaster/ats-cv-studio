@@ -21,6 +21,9 @@ interface DesktopBridge {
 
 export type AiProvider = 'anthropic' | 'openai' | 'google' | 'deepseek' | 'custom';
 
+/** Providers that offer speech to text. '' means voice uses the chat provider above. */
+export type AiVoiceProvider = 'openai' | 'google' | 'custom';
+
 export interface AiMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -33,6 +36,16 @@ export interface AiSettings {
   hasKey: boolean;
   defaultModel: string;
   defaultBaseUrl: string;
+  /** A second provider used only for voice answers; '' keeps voice on the chat provider. */
+  voiceProvider: AiVoiceProvider | '';
+  voiceModel: string;
+  voiceBaseUrl: string;
+  hasVoiceKey: boolean;
+  /** Whether the provider voice would use offers speech to text at all. */
+  voiceCanTranscribe: boolean;
+  /** ...and whether it is configured too (a key, or a URL for a custom endpoint). */
+  voiceReady: boolean;
+  defaultVoiceModel: string;
 }
 
 export interface AiSettingsPatch {
@@ -41,6 +54,10 @@ export interface AiSettingsPatch {
   baseUrl: string;
   /** An empty string clears the stored key; omit the field to leave it untouched. */
   apiKey: string;
+  voiceProvider: AiVoiceProvider | '';
+  voiceModel: string;
+  voiceBaseUrl: string;
+  voiceApiKey: string;
 }
 
 export type AiCompletion =

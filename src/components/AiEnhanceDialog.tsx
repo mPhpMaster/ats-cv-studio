@@ -1,36 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../i18n';
 import { AiResponseError, applyAiResponse, buildAiPrompt, gapLines, issueLines, type AiApplyResult, type AiMode } from '../lib/aiPrompt';
-import type { AiMessage, AiProvider, AiSettings, AiSettingsPatch } from '../lib/download';
+import type { AiMessage, AiSettings } from '../lib/download';
 import type { AnalysisResult, CVData } from '../types';
-
-const PROVIDERS: { id: AiProvider; label: string }[] = [
-  { id: 'anthropic', label: 'Anthropic (Claude)' },
-  { id: 'openai', label: 'OpenAI (ChatGPT)' },
-  { id: 'google', label: 'Google (Gemini)' },
-  { id: 'deepseek', label: 'DeepSeek' },
-  { id: 'custom', label: 'Custom / local (OpenAI-compatible)' },
-];
-
-/** Suggested models per provider. "Other" stays available so a newer model can always be typed in. */
-const MODELS: Record<AiProvider, string[]> = {
-  anthropic: ['claude-sonnet-5', 'claude-opus-5', 'claude-haiku-4-5-20251001'],
-  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini'],
-  google: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
-  custom: [],
-};
-
-/** Where each provider hands out API keys. */
-const KEY_PAGES: Record<AiProvider, string> = {
-  anthropic: 'https://console.anthropic.com/settings/keys',
-  openai: 'https://platform.openai.com/api-keys',
-  google: 'https://aistudio.google.com/app/apikey',
-  deepseek: 'https://platform.deepseek.com/api_keys',
-  custom: '',
-};
-
-const OTHER_MODEL = '__other__';
+import AiSettingsDialog from './AiSettingsDialog';
 
 const AI_SITES = [
   { name: 'ChatGPT', url: 'https://chatgpt.com/' },
@@ -62,8 +35,8 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
   const [errorDetail, setErrorDetail] = useState('');
   const [preview, setPreview] = useState<(AiApplyResult & { score: number; remaining: string[] }) | null>(null);
   const [settings, setSettings] = useState<AiSettings | null>(null);
-  const [keyInput, setKeyInput] = useState('');
-  const [savedFlash, setSavedFlash] = useState(false);
+  /** The connection settings are edited in their own dialog, which this can open on top of itself. */
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [running, setRunning] = useState(false);
   /** The running interview: the whole conversation is kept so the assistant remembers what it already asked. */
   const [chat, setChat] = useState<AiMessage[] | null>(null);
@@ -73,18 +46,12 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
   const canRunAuto = typeof window !== 'undefined' && typeof window.desktop?.aiComplete === 'function';
   /** A hosted provider needs a key; a custom endpoint needs a URL instead. */
   const aiReady = Boolean(settings && (settings.provider === 'custom' ? settings.baseUrl : settings.hasKey));
-  const [typeOwnModel, setTypeOwnModel] = useState(false);
-  const provider: AiProvider = settings?.provider ?? 'anthropic';
-  const modelList = MODELS[provider];
-  const savedModel = settings?.model ?? '';
-  /** A model already saved but absent from the list (e.g. a newer one) keeps the free-text box open. */
-  const unlistedModel = Boolean(savedModel) && !modelList.includes(savedModel);
-  const typedModel = provider === 'custom' || typeOwnModel || unlistedModel;
-  const selectedModel = savedModel || settings?.defaultModel || modelList[0] || '';
-
-  useEffect(() => {
+  /** The settings dialog does the writing; this only picks up whatever it changed. */
+  const refreshSettings = () => {
     window.desktop?.aiSettingsGet?.().then(setSettings).catch(() => setSettings(null));
-  }, []);
+  };
+
+  useEffect(refreshSettings, []);
 
   const issues = useMemo(() => issueLines(result), [result]);
   const gaps = useMemo(() => gapLines(cv, lang), [cv, lang]);
@@ -169,16 +136,6 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
     setAnswer('');
     sendTurn([...(chat ?? []), { role: 'user', content: text }]);
   };
-
-  async function saveSettings(patch: Partial<AiSettingsPatch>) {
-    // Switching provider resets the model in the main process, so drop back to its picker too.
-    if (patch.provider) setTypeOwnModel(false);
-    const next = await window.desktop!.aiSettingsSet!(patch);
-    setSettings(next);
-    if (patch.apiKey !== undefined) setKeyInput('');
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 2000);
-  }
 
   function onPreview(text = reply) {
     setError('');
@@ -312,62 +269,9 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
                   <span className="muted">{a.autoHint}</span>
                 </div>
                 {!aiReady && <p className="hint">{a.needsKey}</p>}
-                <details className="panel">
-                  <summary>{a.connection}</summary>
-                  <div className="panel-body">
-                    <label className="field">
-                      <span>{a.provider}</span>
-                      <select value={settings?.provider ?? 'anthropic'} onChange={(e) => saveSettings({ provider: e.target.value as AiProvider })}>
-                        {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                      </select>
-                    </label>
-                    {settings?.provider !== 'custom' && (
-                      <>
-                        <label className="field">
-                          <span>{a.apiKey}</span>
-                          <input type="password" dir="ltr" autoComplete="off" value={keyInput}
-                            placeholder={settings?.hasKey ? '••••••••••••' : a.keyPlaceholder}
-                            onChange={(e) => setKeyInput(e.target.value)} />
-                        </label>
-                        <div className="row-actions">
-                          <button disabled={!keyInput.trim()} onClick={() => saveSettings({ apiKey: keyInput })}>
-                            {savedFlash ? a.saved : a.save}
-                          </button>
-                          {settings?.hasKey && <button onClick={() => saveSettings({ apiKey: '' })}>{a.removeKey}</button>}
-                          {KEY_PAGES[provider] && (
-                            <button type="button" onClick={() => window.open(KEY_PAGES[provider], '_blank', 'noopener')}>
-                              {a.getKey} ↗
-                            </button>
-                          )}
-                        </div>
-                        {settings?.hasKey && <p className="muted small-note">{a.keySaved}</p>}
-                      </>
-                    )}
-                    <label className="field">
-                      <span>{a.model}</span>
-                      {typedModel ? (
-                        <input key={`model-${provider}`} type="text" dir="ltr" defaultValue={savedModel}
-                          placeholder={settings?.defaultModel} onBlur={(e) => saveSettings({ model: e.target.value })} />
-                      ) : (
-                        <select value={selectedModel} onChange={(e) => {
-                          if (e.target.value === OTHER_MODEL) setTypeOwnModel(true);
-                          else saveSettings({ model: e.target.value });
-                        }}>
-                          {modelList.map((m) => <option key={m} value={m}>{m}</option>)}
-                          <option value={OTHER_MODEL}>{a.otherModel}</option>
-                        </select>
-                      )}
-                    </label>
-                    {settings?.provider === 'custom' && (
-                      <label className="field">
-                        <span>{a.endpoint}</span>
-                        <input key={`base-${settings?.provider}`} type="url" dir="ltr" defaultValue={settings?.baseUrl ?? ''}
-                          placeholder="http://localhost:1234" onBlur={(e) => saveSettings({ baseUrl: e.target.value })} />
-                      </label>
-                    )}
-                    <p className="muted small-note">{a.keyPrivacy}</p>
-                  </div>
-                </details>
+                <div className="row-actions">
+                  <button type="button" onClick={() => setSettingsOpen(true)}>⚙ {a.openSettings}</button>
+                </div>
               </section>
             )}
 
@@ -455,6 +359,7 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
             </div>
           </div>
         )}
+        {settingsOpen && <AiSettingsDialog onClose={() => { setSettingsOpen(false); refreshSettings(); }} />}
       </div>
     </div>
   );

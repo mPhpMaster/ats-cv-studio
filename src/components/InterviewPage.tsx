@@ -122,8 +122,8 @@ export default function InterviewPage({ cv, jobDescription, onApplied }: Props) 
         lang === 'ar' ? 'ar' : 'en',
       );
       if (!res.ok) {
-        setMicNote(res.error === 'no-transcription' ? v.micNoProvider
-          : res.error === 'no-key' ? v.needsKey
+        setMicNote(res.error === 'no-transcription' || res.error === 'bad-provider' ? v.micNoProvider
+          : res.error === 'no-key' || res.error === 'no-base-url' ? v.micNeedsVoiceKey
             : res.error === 'empty' ? v.micNothing : v.micFailed);
         return;
       }

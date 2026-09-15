@@ -3,18 +3,26 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+// `sttModel` is the provider's default speech-to-text model — and an empty one means the provider has no
+// speech-to-text service at all, which is the single source of truth for whether voice answers can work.
 const PROVIDERS = {
-  anthropic: { base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
-  openai: { base: 'https://api.openai.com', model: 'gpt-4o' },
-  google: { base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash' },
+  anthropic: { base: 'https://api.anthropic.com', model: 'claude-sonnet-5', sttModel: '' },
+  openai: { base: 'https://api.openai.com', model: 'gpt-4o', sttModel: 'whisper-1' },
+  google: { base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash', sttModel: 'gemini-2.0-flash' },
   // DeepSeek speaks the OpenAI chat-completions protocol, so it needs no adapter of its own.
-  deepseek: { base: 'https://api.deepseek.com', model: 'deepseek-chat' },
+  deepseek: { base: 'https://api.deepseek.com', model: 'deepseek-chat', sttModel: '' },
   // OpenAI-compatible endpoint the user points at themselves (a local model, a gateway, a proxy).
-  custom: { base: '', model: '' },
+  custom: { base: '', model: '', sttModel: 'whisper-1' },
 };
 
+const canTranscribe = (provider) => Boolean(PROVIDERS[provider] && PROVIDERS[provider].sttModel);
+
 const SETTINGS_FILE = 'ai-settings.json';
-const DEFAULTS = { provider: 'anthropic', model: '', baseUrl: '', apiKey: '' };
+const DEFAULTS = {
+  provider: 'anthropic', model: '', baseUrl: '', apiKey: '',
+  // A second, optional provider used only for voice answers. Empty means "use the chat provider above".
+  voiceProvider: '', voiceModel: '', voiceBaseUrl: '', voiceApiKey: '',
+};
 const trim = (v) => (typeof v === 'string' ? v.trim() : '');
 
 function settingsPath(dir) {
@@ -29,6 +37,11 @@ function readSettings(dir) {
       model: trim(saved.model),
       baseUrl: trim(saved.baseUrl),
       apiKey: typeof saved.apiKey === 'string' ? saved.apiKey : '',
+      // Only a provider that actually offers speech-to-text may be stored here.
+      voiceProvider: canTranscribe(saved.voiceProvider) ? saved.voiceProvider : '',
+      voiceModel: trim(saved.voiceModel),
+      voiceBaseUrl: trim(saved.voiceBaseUrl),
+      voiceApiKey: typeof saved.voiceApiKey === 'string' ? saved.voiceApiKey : '',
     };
   } catch {
     return { ...DEFAULTS };
@@ -48,15 +61,41 @@ function writeSettings(dir, patch) {
     if (typeof patch.baseUrl === 'string') next.baseUrl = trim(patch.baseUrl);
     // An empty string clears the stored key; undefined leaves it untouched.
     if (typeof patch.apiKey === 'string') next.apiKey = patch.apiKey.trim();
+    // Voice answers: '' hands them back to the chat provider; anything else must offer speech-to-text.
+    if (typeof patch.voiceProvider === 'string') {
+      const wanted = trim(patch.voiceProvider);
+      if (!wanted || canTranscribe(wanted)) {
+        if (wanted !== next.voiceProvider && typeof patch.voiceModel !== 'string') next.voiceModel = '';
+        next.voiceProvider = wanted;
+      }
+    }
+    if (typeof patch.voiceModel === 'string') next.voiceModel = trim(patch.voiceModel);
+    if (typeof patch.voiceBaseUrl === 'string') next.voiceBaseUrl = trim(patch.voiceBaseUrl);
+    if (typeof patch.voiceApiKey === 'string') next.voiceApiKey = patch.voiceApiKey.trim();
   }
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(settingsPath(dir), JSON.stringify(next, null, 2), { mode: 0o600 });
   return next;
 }
 
-/** What the renderer is allowed to see: never the key itself, only whether one is stored. */
+/**
+ * Which credentials a voice answer uses. The chat provider serves by default, but Anthropic and DeepSeek have
+ * no speech-to-text service at all, so voice can be pointed at a second provider while chat stays where it is.
+ * The chat model is deliberately not carried over: it names a chat model, never a transcription one.
+ */
+function voiceConfig(s) {
+  if (s.voiceProvider) {
+    return { provider: s.voiceProvider, apiKey: s.voiceApiKey, baseUrl: s.voiceBaseUrl, model: s.voiceModel };
+  }
+  return { provider: s.provider, apiKey: s.apiKey, baseUrl: s.baseUrl, model: '' };
+}
+
+/** What the renderer is allowed to see: never a key itself, only whether one is stored. */
 function publicSettings(s) {
   const preset = PROVIDERS[s.provider] ?? PROVIDERS.anthropic;
+  const voice = voiceConfig(s);
+  const voicePreset = PROVIDERS[voice.provider] ?? PROVIDERS.anthropic;
+  const voiceBase = trim(voice.baseUrl) || voicePreset.base;
   return {
     provider: s.provider,
     model: s.model,
@@ -64,6 +103,16 @@ function publicSettings(s) {
     hasKey: Boolean(trim(s.apiKey)),
     defaultModel: preset.model,
     defaultBaseUrl: preset.base,
+    voiceProvider: s.voiceProvider,
+    voiceModel: s.voiceModel,
+    voiceBaseUrl: s.voiceBaseUrl,
+    hasVoiceKey: Boolean(trim(s.voiceApiKey)),
+    /** Whether the provider voice would actually use has a speech-to-text service in the first place. */
+    voiceCanTranscribe: canTranscribe(voice.provider),
+    /** ...and whether it is also configured: a hosted provider needs a key, a custom one needs a URL. */
+    voiceReady: canTranscribe(voice.provider)
+      && Boolean(voice.provider === 'custom' ? voiceBase : trim(voice.apiKey)),
+    defaultVoiceModel: voicePreset.sttModel,
   };
 }
 
@@ -205,7 +254,7 @@ async function transcribeAudio(options, fetchImpl) {
   const provider = options && PROVIDERS[options.provider] ? options.provider : '';
   if (!provider) return { ok: false, error: 'bad-provider' };
   // Anthropic and DeepSeek have no speech-to-text endpoint; saying so beats a vague failure.
-  if (provider === 'anthropic' || provider === 'deepseek') return { ok: false, error: 'no-transcription' };
+  if (!canTranscribe(provider)) return { ok: false, error: 'no-transcription' };
 
   const apiKey = trim(options.apiKey);
   const base = (trim(options.baseUrl) || PROVIDERS[provider].base).replace(/\/+$/, '');
@@ -213,13 +262,15 @@ async function transcribeAudio(options, fetchImpl) {
   const mimeType = trim(options.mimeType) || 'audio/webm';
   const language = trim(options.language);
   if (!audio) return { ok: false, error: 'no-audio' };
+  // A custom endpoint has no default address, so without one there is nowhere to send the recording.
+  if (!base) return { ok: false, error: 'no-base-url' };
   if (provider !== 'custom' && !apiKey) return { ok: false, error: 'no-key' };
 
   let res;
   try {
     if (provider === 'google') {
       // Gemini takes the audio inline and is asked to write down what it hears.
-      const model = trim(options.model) || 'gemini-2.0-flash';
+      const model = trim(options.model) || PROVIDERS[provider].sttModel;
       res = await doFetch(`${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -236,7 +287,7 @@ async function transcribeAudio(options, fetchImpl) {
       // OpenAI-compatible speech-to-text takes a multipart upload.
       const form = new FormData();
       form.append('file', new Blob([Buffer.from(audio, 'base64')], { type: mimeType }), 'answer.webm');
-      form.append('model', trim(options.model) || 'whisper-1');
+      form.append('model', trim(options.model) || PROVIDERS[provider].sttModel);
       if (language) form.append('language', language);
       res = await doFetch(`${base}/v1/audio/transcriptions`, {
         method: 'POST',
@@ -272,6 +323,8 @@ module.exports = {
   readSettings,
   writeSettings,
   publicSettings,
+  voiceConfig,
+  canTranscribe,
   PROVIDERS,
   _internals: { buildRequest, extractText, scrub, providerMessage },
 };

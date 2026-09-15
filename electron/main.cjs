@@ -3,7 +3,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { importLinkedInProfile } = require('./linkedin.cjs');
-const { callAi, transcribeAudio, readSettings, writeSettings, publicSettings } = require('./aiClient.cjs');
+const { callAi, transcribeAudio, readSettings, writeSettings, publicSettings, voiceConfig } = require('./aiClient.cjs');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const FILTERS = {
@@ -112,13 +112,13 @@ ipcMain.handle('ai-complete', async (_event, { prompt }) => {
   return callAi({ ...settings, prompt: String(prompt ?? '') });
 });
 
-// Speech to text. The transcription model is separate from the chat model, so the chat one is not passed on.
+// Speech to text. Voice may run on a different provider from chat, because the chat one the user picked
+// (Anthropic, DeepSeek) may have no speech-to-text service at all; voiceConfig picks whichever applies, and
+// never carries the chat model over — that names a chat model, not a transcription one.
 ipcMain.handle('ai-transcribe', async (_event, { audio, mimeType, language }) => {
   const settings = readSettings(app.getPath('userData'));
   return transcribeAudio({
-    provider: settings.provider,
-    apiKey: settings.apiKey,
-    baseUrl: settings.baseUrl,
+    ...voiceConfig(settings),
     audio: String(audio ?? ''),
     mimeType: String(mimeType ?? ''),
     language: String(language ?? ''),

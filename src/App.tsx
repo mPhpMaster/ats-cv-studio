@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import Builder from './components/Builder';
 import Checker from './components/Checker';
+import AiSettingsDialog from './components/AiSettingsDialog';
 import InterviewPage from './components/InterviewPage';
 import { I18nContext, messages } from './i18n';
+import { isDesktop } from './lib/download';
 import { sampleCV } from './lib/sample';
 import type { CVData, Lang } from './types';
 
@@ -34,6 +36,8 @@ export default function App() {
   const [cv, setCv] = usePersistent<CVData>('ats.cv', () => sampleCV(lang));
   const [jobDescription, setJobDescription] = usePersistent<string>('ats.jd', () => '');
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  /** The AI connection settings live behind their own button, not buried inside the AI dialogs. */
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -71,6 +75,12 @@ export default function App() {
               🗨 {t.interview.tab}
             </button>
           </nav>
+          {/* Desktop only: the settings are written to a file on this computer, which the web build has no access to. */}
+          {isDesktop() && (
+            <button className="lang-switch" onClick={() => setSettingsOpen(true)} title={t.ai.settingsTitle}>
+              ⚙ {t.ai.openSettings}
+            </button>
+          )}
           <button className="lang-switch" onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')} lang={lang === 'ar' ? 'en' : 'ar'}>
             {t.switchLabel}
           </button>
@@ -98,6 +108,7 @@ export default function App() {
             <InterviewPage cv={cv} jobDescription={jobDescription} onApplied={openInBuilder} />
           </div>
         )}
+        {settingsOpen && <AiSettingsDialog onClose={() => setSettingsOpen(false)} />}
       </div>
     </I18nContext.Provider>
   );
