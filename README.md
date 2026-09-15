@@ -47,7 +47,7 @@ After applying, the preview lists any issues that are **still open** and why —
 
 By default you copy the prompt into any assistant (ChatGPT, Claude, Gemini…) and paste the reply back — no account or key needed.
 
-If you would rather the app do it for you, open **AI connection (API key)** inside any AI dialog and save a key for **Anthropic**, **OpenAI**, **Google**, or a **custom OpenAI-compatible endpoint** (a local model or gateway, which may need no key at all). The **⚡ Run with AI now** button then sends the prompt and brings the reply straight back into the preview.
+If you would rather the app do it for you, open **AI connection (API key)** inside any AI dialog and save a key for **Anthropic**, **OpenAI**, **Google**, **DeepSeek**, or a **custom OpenAI-compatible endpoint** (a local model or gateway, which may need no key at all). Pick the model from the list for that provider — or type your own — and use **Get an API key ↗** to open the provider's key page. The **⚡ Run with AI now** button then sends the prompt and brings the reply straight back into the preview.
 
 - The key is stored only on your computer, in the app's own data folder (`ai-settings.json`), never in the page and never in a browser store.
 - The request is made from the Electron main process, so the key is never exposed to the app's web page, and it is redacted from any error message shown or logged.

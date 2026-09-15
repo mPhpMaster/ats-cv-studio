@@ -15,7 +15,7 @@ interface DesktopBridge {
   aiComplete?(prompt: string): Promise<AiCompletion>;
 }
 
-export type AiProvider = 'anthropic' | 'openai' | 'google' | 'custom';
+export type AiProvider = 'anthropic' | 'openai' | 'google' | 'deepseek' | 'custom';
 
 export interface AiSettings {
   provider: AiProvider;

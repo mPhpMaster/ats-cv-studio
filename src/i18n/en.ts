@@ -144,6 +144,8 @@ export const en = {
     save: 'Save',
     saved: 'Saved ✓',
     providerSaid: 'The provider said:',
+    getKey: 'Get an API key',
+    otherModel: 'Other (type a name)…',
     keyPrivacy: 'The key is stored on this computer only, in the app’s own data folder. It is never shown to the page and never sent anywhere except to the provider you choose.',
     aiErrors: {
       'no-key': 'No API key is saved. Add one below first.',

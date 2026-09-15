@@ -7,6 +7,8 @@ const PROVIDERS = {
   anthropic: { base: 'https://api.anthropic.com', model: 'claude-sonnet-5' },
   openai: { base: 'https://api.openai.com', model: 'gpt-4o' },
   google: { base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash' },
+  // DeepSeek speaks the OpenAI chat-completions protocol, so it needs no adapter of its own.
+  deepseek: { base: 'https://api.deepseek.com', model: 'deepseek-chat' },
   // OpenAI-compatible endpoint the user points at themselves (a local model, a gateway, a proxy).
   custom: { base: '', model: '' },
 };
@@ -36,7 +38,12 @@ function readSettings(dir) {
 function writeSettings(dir, patch) {
   const next = { ...readSettings(dir) };
   if (patch && typeof patch === 'object') {
-    if (PROVIDERS[patch.provider]) next.provider = patch.provider;
+    if (PROVIDERS[patch.provider]) {
+      // A model name belongs to one provider: carrying "claude-sonnet-5" over to Gemini guarantees a failure.
+      // Clearing it falls back to the new provider's own default unless the caller names a model explicitly.
+      if (patch.provider !== next.provider && typeof patch.model !== 'string') next.model = '';
+      next.provider = patch.provider;
+    }
     if (typeof patch.model === 'string') next.model = trim(patch.model);
     if (typeof patch.baseUrl === 'string') next.baseUrl = trim(patch.baseUrl);
     // An empty string clears the stored key; undefined leaves it untouched.
