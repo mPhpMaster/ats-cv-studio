@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import ErrorBoundary from './components/ErrorBoundary';
 // Theme fonts are bundled so the desktop app looks the same offline.
 import '@fontsource/manrope/400.css';
 import '@fontsource/manrope/500.css';
@@ -16,6 +17,9 @@ import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {/* Outermost on purpose: a throw anywhere below must not leave a blank window with no way back. */}
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

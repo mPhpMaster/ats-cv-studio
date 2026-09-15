@@ -3,11 +3,104 @@ import { useI18n } from '../i18n';
 import { analyzeCV, type SourceInfo } from '../lib/analyzer';
 import { hasContent, parseCVText } from '../lib/cvParser';
 import { cvToText } from '../lib/cvText';
+import { buildJobDescriptionPrompt, JOB_PRESETS } from '../lib/jobPresets';
 import { useSpellChecker } from '../lib/spell';
 import type { CVData } from '../types';
 import AiEnhanceDialog from './AiEnhanceDialog';
 import CVPreview from './CVPreview';
 import { FullReport } from './Report';
+
+/**
+ * Three ways to fill the job description, because the box is the single biggest lever on the tailoring score
+ * and an empty one silently disables half the report: a ready-made posting to start from, the real posting
+ * brought in from a file or the clipboard, or one written by the user's own AI from a job title.
+ */
+function JobDescriptionTools({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t, lang } = useI18n();
+  const c = t.checker;
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const fileInput = useRef<HTMLInputElement>(null);
+  const canAi = typeof window !== 'undefined' && typeof window.desktop?.aiComplete === 'function';
+
+  async function fromClipboard() {
+    setNote('');
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) onChange(text);
+      else setNote(c.jdClipboardFailed);
+    } catch {
+      setNote(c.jdClipboardFailed);
+    }
+  }
+
+  async function fromFile(file: File) {
+    setNote('');
+    setBusy(true);
+    try {
+      // The same local parser the CV upload uses: PDF, DOCX and TXT, all read on this machine.
+      const { parseFile } = await import('../lib/parseFile');
+      const parsed = await parseFile(file);
+      if (parsed.text.trim()) onChange(parsed.text);
+      else setNote(c.jdReadFailed);
+    } catch {
+      setNote(c.jdReadFailed);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function writeWithAi() {
+    setNote('');
+    if (!title.trim()) { setNote(c.jdAiNeedsTitle); return; }
+    if (!canAi) { setNote(c.jdAiNeedsKey); return; }
+    setBusy(true);
+    try {
+      const res = await window.desktop!.aiComplete!(buildJobDescriptionPrompt(title, lang));
+      if (res.ok) onChange(res.text.trim());
+      // Already scrubbed of the API key in the main process, so it is safe to show.
+      else setNote(res.message ?? (t.ai.aiErrors as Record<string, string>)[res.error] ?? t.ai.aiErrors.http);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="jd-tools">
+      <div className="chip-row">
+        <span className="muted small-note jd-tools-label">{c.jdPresets}</span>
+        {JOB_PRESETS.map((p) => (
+          <button key={p.id} type="button" className="chip" onClick={() => { setNote(''); onChange(p.text[lang]); }}>
+            {p.label[lang]}
+          </button>
+        ))}
+        {value.trim() && <button type="button" className="chip" onClick={() => { setNote(''); onChange(''); }}>✕ {c.jdClear}</button>}
+      </div>
+      <p className="muted small-note">{c.jdPresetsHint}</p>
+
+      <div className="row-actions">
+        <button type="button" disabled={busy} onClick={() => fileInput.current?.click()}>{c.jdFromFile}</button>
+        <button type="button" disabled={busy} onClick={fromClipboard}>{c.jdFromClipboard}</button>
+        <input ref={fileInput} type="file" accept=".pdf,.docx,.txt,.doc" hidden
+          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) fromFile(f); }} />
+      </div>
+
+      {canAi && (
+        <div className="row-actions jd-ai">
+          <input type="text" dir="auto" value={title} placeholder={c.jdAiTitlePh}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void writeWithAi(); } }} />
+          <button type="button" className="primary" disabled={busy || !title.trim()} onClick={writeWithAi}>
+            {busy ? c.jdAiRunning : c.jdWithAi}
+          </button>
+        </div>
+      )}
+
+      {note && <p className="muted small-note" dir="auto" style={{ userSelect: 'text' }}>{note}</p>}
+    </div>
+  );
+}
 
 interface Props {
   jobDescription: string;
@@ -162,6 +255,7 @@ export default function Checker({ jobDescription, setJobDescription, onOpenInBui
         <section className="card">
           <h3>{t.checker.jd} <span className="muted">{t.checker.recommended}</span></h3>
           <textarea rows={result ? 5 : 9} dir="auto" value={jobDescription} onChange={(e) => setJobDescription(e.target.value)} placeholder={t.checker.jdPh} />
+          <JobDescriptionTools value={jobDescription} onChange={setJobDescription} />
         </section>
 
         <section className="card">

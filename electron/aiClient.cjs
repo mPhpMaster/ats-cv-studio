@@ -8,7 +8,10 @@ const path = require('node:path');
 const PROVIDERS = {
   anthropic: { base: 'https://api.anthropic.com', model: 'claude-sonnet-5', sttModel: '' },
   openai: { base: 'https://api.openai.com', model: 'gpt-4o', sttModel: 'whisper-1' },
-  google: { base: 'https://generativelanguage.googleapis.com', model: 'gemini-2.0-flash', sttModel: 'gemini-2.0-flash' },
+  // Google retires model names fast: 2.0-flash went in June 2026, and 2.5-flash stopped accepting new
+  // users after it. The name below is the one Google's own 404 body named as the replacement. Because this
+  // will rot again, the model field stays free text so a current name can always be typed in.
+  google: { base: 'https://generativelanguage.googleapis.com', model: 'gemini-3.6-flash', sttModel: 'gemini-3.6-flash' },
   // DeepSeek speaks the OpenAI chat-completions protocol, so it needs no adapter of its own.
   deepseek: { base: 'https://api.deepseek.com', model: 'deepseek-chat', sttModel: '' },
   // OpenAI-compatible endpoint the user points at themselves (a local model, a gateway, a proxy).
@@ -24,6 +27,23 @@ const DEFAULTS = {
   voiceProvider: '', voiceModel: '', voiceBaseUrl: '', voiceApiKey: '',
 };
 const trim = (v) => (typeof v === 'string' ? v.trim() : '');
+
+/**
+ * Where a request for this provider goes. Only the custom provider may name its own address: a hosted provider
+ * always uses its official one, whatever `baseUrl` says. Otherwise anything able to call `aiSettingsSet` — which
+ * never sees the key — could still choose where the key is sent, and receive it there.
+ */
+const endpointFor = (provider, baseUrl) =>
+  (provider === 'custom' ? trim(baseUrl) : (PROVIDERS[provider] ? PROVIDERS[provider].base : '')).replace(/\/+$/, '');
+
+/** https anywhere; plain http only to this machine (a local model), where nothing crosses the network. */
+function endpointAllowed(base) {
+  let u;
+  try { u = new URL(base); } catch { return false; }
+  if (u.username || u.password) return false;
+  if (u.protocol === 'https:') return true;
+  return u.protocol === 'http:' && /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])$/i.test(u.hostname);
+}
 
 function settingsPath(dir) {
   return path.join(dir, SETTINGS_FILE);
@@ -50,6 +70,8 @@ function readSettings(dir) {
 
 function writeSettings(dir, patch) {
   const next = { ...readSettings(dir) };
+  const chatBefore = endpointFor(next.provider, next.baseUrl);
+  const voiceBefore = next.voiceProvider ? endpointFor(next.voiceProvider, next.voiceBaseUrl) : '';
   if (patch && typeof patch === 'object') {
     if (PROVIDERS[patch.provider]) {
       // A model name belongs to one provider: carrying "claude-sonnet-5" over to Gemini guarantees a failure.
@@ -72,6 +94,18 @@ function writeSettings(dir, patch) {
     if (typeof patch.voiceModel === 'string') next.voiceModel = trim(patch.voiceModel);
     if (typeof patch.voiceBaseUrl === 'string') next.voiceBaseUrl = trim(patch.voiceBaseUrl);
     if (typeof patch.voiceApiKey === 'string') next.voiceApiKey = patch.voiceApiKey.trim();
+    // A saved key stays bound to the address it was saved for. When the destination becomes one the caller
+    // picked (a custom endpoint, new or changed), the key is dropped unless this same patch supplies it, so a
+    // key typed for one server is never quietly sent to another. An empty "before" means no key could have
+    // been used yet, which keeps the normal order (key first, endpoint second) working.
+    const chatAfter = endpointFor(next.provider, next.baseUrl);
+    if (next.provider === 'custom' && chatBefore && chatAfter !== chatBefore && typeof patch.apiKey !== 'string') {
+      next.apiKey = '';
+    }
+    const voiceAfter = next.voiceProvider ? endpointFor(next.voiceProvider, next.voiceBaseUrl) : '';
+    if (next.voiceProvider === 'custom' && voiceBefore && voiceAfter !== voiceBefore && typeof patch.voiceApiKey !== 'string') {
+      next.voiceApiKey = '';
+    }
   }
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(settingsPath(dir), JSON.stringify(next, null, 2), { mode: 0o600 });
@@ -95,7 +129,7 @@ function publicSettings(s) {
   const preset = PROVIDERS[s.provider] ?? PROVIDERS.anthropic;
   const voice = voiceConfig(s);
   const voicePreset = PROVIDERS[voice.provider] ?? PROVIDERS.anthropic;
-  const voiceBase = trim(voice.baseUrl) || voicePreset.base;
+  const voiceBase = endpointFor(voice.provider, voice.baseUrl);
   return {
     provider: s.provider,
     model: s.model,
@@ -139,8 +173,10 @@ function buildRequest({ provider, apiKey, model, base, messages }) {
   }
   if (provider === 'google') {
     return {
-      url: `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      headers: json,
+      // The key travels in a header, never the query string: URLs end up in logs, proxies and crash reports.
+      // This is also Google's own documented form, and it accepts both the older AIza… keys and the newer AQ… ones.
+      url: `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      headers: { ...json, 'x-goog-api-key': apiKey },
       // Google calls the assistant's turns "model" rather than "assistant".
       body: { contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })) },
     };
@@ -196,7 +232,7 @@ async function callAi(options, fetchImpl) {
   const preset = PROVIDERS[provider];
   const apiKey = trim(options.apiKey);
   const model = trim(options.model) || preset.model;
-  const base = (trim(options.baseUrl) || preset.base).replace(/\/+$/, '');
+  const base = endpointFor(provider, options.baseUrl);
   // Either a single prompt or a full conversation; both end up as a messages array.
   const turns = Array.isArray(options.messages)
     ? options.messages
@@ -208,6 +244,7 @@ async function callAi(options, fetchImpl) {
 
   if (!messages.length) return { ok: false, error: 'no-prompt' };
   if (!base) return { ok: false, error: 'no-base-url' };
+  if (!endpointAllowed(base)) return { ok: false, error: 'bad-base-url' };
   if (!model) return { ok: false, error: 'no-model' };
   // A custom endpoint may legitimately need no key (a local model); the hosted providers always do.
   if (provider !== 'custom' && !apiKey) return { ok: false, error: 'no-key' };
@@ -257,13 +294,14 @@ async function transcribeAudio(options, fetchImpl) {
   if (!canTranscribe(provider)) return { ok: false, error: 'no-transcription' };
 
   const apiKey = trim(options.apiKey);
-  const base = (trim(options.baseUrl) || PROVIDERS[provider].base).replace(/\/+$/, '');
+  const base = endpointFor(provider, options.baseUrl);
   const audio = typeof options.audio === 'string' ? options.audio : '';
   const mimeType = trim(options.mimeType) || 'audio/webm';
   const language = trim(options.language);
   if (!audio) return { ok: false, error: 'no-audio' };
   // A custom endpoint has no default address, so without one there is nowhere to send the recording.
   if (!base) return { ok: false, error: 'no-base-url' };
+  if (!endpointAllowed(base)) return { ok: false, error: 'bad-base-url' };
   if (provider !== 'custom' && !apiKey) return { ok: false, error: 'no-key' };
 
   let res;
@@ -271,9 +309,10 @@ async function transcribeAudio(options, fetchImpl) {
     if (provider === 'google') {
       // Gemini takes the audio inline and is asked to write down what it hears.
       const model = trim(options.model) || PROVIDERS[provider].sttModel;
-      res = await doFetch(`${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      res = await doFetch(`${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        // Header rather than ?key=, for the same reason as the chat call above.
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           contents: [{
             parts: [
@@ -303,11 +342,15 @@ async function transcribeAudio(options, fetchImpl) {
     let detail = '';
     try { detail = await res.text(); } catch { /* empty body */ }
     const reason = providerMessage(detail);
+    // A 404 used to be reported as "this provider has no speech-to-text". Providers that genuinely have
+    // none are already refused above, so here it means the model or endpoint name is wrong — and calling
+    // that "no such service" sends the user off to configure something they have already configured.
     const error = /credit balance|billing|insufficient|exceeded your current quota/i.test(reason) ? 'billing'
       : res.status === 401 || res.status === 403 ? 'auth'
         : res.status === 429 ? 'rate-limit'
-          : res.status === 404 ? 'no-transcription'
-            : 'http';
+          : res.status === 404 ? 'not-found'
+            : res.status === 400 || res.status === 422 ? 'bad-request'
+              : 'http';
     return { ok: false, error, message: scrub(`${res.status} ${reason}`, apiKey) };
   }
 

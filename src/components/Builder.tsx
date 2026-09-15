@@ -266,9 +266,25 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
   function onImportJson(file: File) {
     file.text().then((raw) => {
       try {
-        const data = JSON.parse(raw) as CVData;
-        if (!data.personal) throw new Error('invalid');
-        onImported(data, file.name);
+        const data = JSON.parse(raw) as Partial<CVData>;
+        if (!data.personal || typeof data.personal !== 'object') throw new Error('invalid');
+        // Merged onto an empty CV, never taken raw. Every renderer reads these fields unguarded
+        // (`cv.summary.trim()`, `cv.experience.length`, `cv.certifications.filter(...)`), and the imported
+        // object is persisted immediately — so a single missing key used to throw on every launch from then
+        // on, with no way out but clearing stored data by hand.
+        const blank = emptyCV(lang);
+        onImported({
+          ...blank,
+          ...data,
+          personal: { ...blank.personal, ...data.personal },
+          // getDesign owns what a design means, and validates every field; spreading a partial one here
+          // would put `undefined` straight back into the shape this merge exists to keep out.
+          design: getDesign({ ...blank, ...data } as CVData),
+          experience: Array.isArray(data.experience) ? data.experience : blank.experience,
+          education: Array.isArray(data.education) ? data.education : blank.education,
+          certifications: Array.isArray(data.certifications) ? data.certifications : blank.certifications,
+          projects: Array.isArray(data.projects) ? data.projects : blank.projects,
+        }, file.name);
       } catch {
         alert(b.invalidJson);
       }

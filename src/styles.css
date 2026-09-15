@@ -470,6 +470,59 @@ button.chip:hover { border-color: var(--fail); color: var(--fail); }
 .chat-ai { background: var(--surface); border: 1px solid var(--border); align-self: flex-start; }
 .chat-you { background: var(--accent-faint); align-self: flex-end; }
 
+/* The current question, set apart from the transcript so there is never a doubt about what is being asked. */
+.q-card {
+  background: var(--surface); border: 1px solid var(--border); border-inline-start: 3px solid var(--accent);
+  border-radius: var(--radius); padding: 14px 16px; margin: 14px 0 4px;
+}
+.q-card h3 { margin: 0; font-size: 16px; line-height: 1.65; }
+
+/* One-click answers the assistant suggested. */
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.chip {
+  border-radius: 999px; padding: 7px 14px; font-size: 13px; font-weight: 600;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip[aria-pressed='true'] { background: var(--accent-faint); border-color: var(--accent); color: var(--accent); }
+
+/* The error boundary's screen. Styled with plain values, not tokens, so it still renders if the theme
+   itself is what failed. */
+.crash { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f6f7f9; }
+.crash-card {
+  width: min(560px, 100%); background: #fff; border: 1px solid #dfe3e8; border-radius: 12px;
+  padding: 24px 26px; box-shadow: 0 8px 30px rgb(15 23 42 / .08);
+}
+.crash-card h1 { margin: 0 0 10px; font-size: 20px; }
+.crash-card p { margin: 0 0 10px; }
+
+/* Copy the conversation out to any assistant, paste its reply back in. */
+.manual-panel { margin-top: 14px; }
+.manual-panel textarea { width: 100%; }
+.manual-panel textarea.prompt { font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--muted); background: var(--editor); }
+
+/* Ways to fill the job description box. */
+.jd-tools { margin-top: 10px; display: flex; flex-direction: column; gap: 2px; }
+.jd-tools .chip-row { margin: 6px 0 2px; align-items: center; }
+.jd-tools-label { margin: 0; }
+.jd-ai { margin-top: 8px; }
+.jd-ai input[type='text'] { flex: 1; min-width: 180px; }
+
+.progress-track { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; margin: 12px 0 2px; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .35s ease; }
+
+.interview-page .row-actions .spacer { flex: 1; }
+.interview-page button.recording { border-color: var(--fail); color: var(--fail); }
+.rec-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--fail);
+  display: inline-block; margin-inline-end: 8px; vertical-align: middle; animation: rec-pulse 1s ease-in-out infinite;
+}
+@keyframes rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .2; } }
+@media (prefers-reduced-motion: reduce) {
+  .rec-dot { animation: none; }
+  .progress-fill { transition: none; }
+}
+
 @media print {
   @page { size: A4; margin: 14mm 15mm; }
   body { background: #fff; }

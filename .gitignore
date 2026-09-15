@@ -4,6 +4,7 @@ dist
 # Build output: the installer is published as a release asset, never committed
 # (GitHub rejects files over 100 MB inside a repository).
 release
+release[0-9]*
 
 # Local build/editor state
 tsconfig.tsbuildinfo

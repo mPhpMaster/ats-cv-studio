@@ -252,7 +252,7 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
                       onChange={(e) => setAnswer(e.target.value)} />
                     <div className="row-actions">
                       <button className="primary" disabled={!answer.trim()} onClick={() => answerChat(answer)}>{a.chatSend}</button>
-                      <button onClick={() => answerChat('skip')}>{a.chatSkip}</button>
+                      <button onClick={() => answerChat(lang === 'ar' ? 'تخطي' : 'skip')}>{a.chatSkip}</button>
                       <button onClick={() => { setChat(null); setAnswer(''); }}>{a.chatRestart}</button>
                     </div>
                   </>

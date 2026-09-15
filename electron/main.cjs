@@ -14,7 +14,10 @@ const FILTERS = {
 };
 
 if (!app.requestSingleInstanceLock()) {
+  // app.quit() is asynchronous: without stopping here the rest of this file still ran and this second copy
+  // opened a window of its own before quitting. A top-level return is valid in a CommonJS module.
   app.quit();
+  return;
 }
 
 let mainWindow = null;

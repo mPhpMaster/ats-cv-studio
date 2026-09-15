@@ -1,3 +1,4 @@
+import { isGulfLocation } from './analyzer';
 import type { AnalysisResult, CVData, Lang } from '../types';
 import { splitList } from './cvText';
 import { cvLang } from './design';
@@ -32,7 +33,7 @@ function cvForPrompt(cv: CVData) {
 }
 
 const OUTPUT_SHAPE = `{
-  "personal": { "fullName": "", "title": "", "email": "", "phone": "", "location": "", "linkedin": "", "website": "" },
+  "personal": { "fullName": "", "title": "", "email": "", "phone": "", "location": "", "nationality": "", "linkedin": "", "website": "" },
   "summary": "",
   "experience": [{ "jobTitle": "", "company": "", "location": "", "startDate": "", "endDate": "", "bullets": [""] }],
   "education": [{ "degree": "", "school": "", "location": "", "startDate": "", "endDate": "", "details": [""] }],
@@ -77,18 +78,25 @@ const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
  * What the CV is still missing, one readable line each. The interview asks only about these, so a section the
  * user already filled in is never questioned again.
  */
-export function gapLines(cv: CVData, uiLang: Lang, limit = 14): string[] {
+export function gapLines(cv: CVData, uiLang: Lang, limit = 20): string[] {
   const ar = uiLang === 'ar';
   const out: string[] = [];
 
   const contact: string[] = [];
-  const need = (value: string, en: string, arabic: string) => { if (!value.trim()) contact.push(ar ? arabic : en); };
+  const need = (value: string, en: string, arabic: string) => { if (!(value ?? '').trim() && !contact.includes(ar ? arabic : en)) contact.push(ar ? arabic : en); };
   need(cv.personal.fullName, 'full name', 'الاسم الكامل');
   need(cv.personal.title, 'professional title', 'المسمى المهني');
   need(cv.personal.email, 'email address', 'البريد الإلكتروني');
   need(cv.personal.phone, 'phone number', 'رقم الهاتف');
   need(cv.personal.location, 'city and country', 'المدينة والدولة');
   need(cv.personal.linkedin, 'LinkedIn URL', 'رابط LinkedIn');
+  // Portfolio/GitHub: a plain missing field like any other.
+  need(cv.personal.website, 'personal website or GitHub', 'الموقع الشخصي أو GitHub');
+  // Nationality only where the report tolerates it. Asking everywhere would push the user to fill a field
+  // that the very same report then counts against them on a CV aimed outside the Gulf.
+  if (cvLang(cv) === 'ar' || isGulfLocation(cv.personal.location ?? '')) {
+    need(cv.personal.nationality, 'nationality', 'الجنسية');
+  }
   if (contact.length) out.push(ar ? `- بيانات ناقصة: ${contact.join('، ')}` : `- Missing details: ${contact.join(', ')}`);
 
   if (wordCount(cv.summary) < 25) {
@@ -264,6 +272,9 @@ export function buildAiPrompt({ cv, jobDescription, result, uiLang, mode = 'enha
         `8. اكتب نصوص السيرة النهائية باللغة ${language}، وأبقِ التواريخ بصيغة شهر/سنة.`,
         '9. بعد إجابتي عن السؤال الأخير فقط، أرسل كائن JSON واحدًا يدمج إجاباتي مع السيرة الحالية. لا ترسل JSON قبل ذلك إطلاقًا.',
         '10. اذكر في "notes" أي نقص بقي بلا إجابة.',
+        '11. أنهِ كل سؤال بسطر أخير بهذه الصيغة حرفيًا: OPTIONS: الأول | الثاني | الثالث',
+        '    ضع من خيارين إلى خمسة، كل منها إجابة قصيرة محتملة للسؤال نفسه (أقل من ٦ كلمات) وبلغة السؤال، مفصولة بعلامة |.',
+        '    هذه اقتراحات يضغطها المستخدم لتملأ صندوق الإجابة، فاجعلها واقعية ومتنوعة. ولا تكتب هذا السطر إطلاقًا في رسالة JSON النهائية.',
         '',
         'النواقص (اسأل عنها فقط، واحدًا تلو الآخر)',
         ...(gaps.length ? gaps : ['- لا توجد نواقص واضحة؛ اسألني عن أرقام تقيس أثر إنجازاتي.']),
@@ -293,6 +304,9 @@ export function buildAiPrompt({ cv, jobDescription, result, uiLang, mode = 'enha
         `8. Write the final CV text in ${language}. Keep dates in MM/YYYY form.`,
         '9. ONLY after I answer the last question, reply with one JSON object merging my answers into the existing CV. Never output JSON before that point.',
         '10. List any gap that stayed unanswered in "notes".',
+        '11. End every question with one final line, exactly in this form: OPTIONS: first | second | third',
+        '    Give 2 to 5 of them, each a short likely answer to that same question (under 6 words), in the language of the question, separated by |.',
+        '    They are tap-to-fill suggestions for the user, so make them realistic and varied. Never write this line in the final JSON message.',
         '',
         'GAPS (ask about these only, one at a time)',
         ...(gaps.length ? gaps : ['- No obvious gaps; ask me for numbers that measure the impact of my achievements.']),
@@ -402,9 +416,15 @@ const objects = (v: unknown): Obj[] =>
   Array.isArray(v) ? (v.filter((x) => x && typeof x === 'object' && !Array.isArray(x)) as Obj[]) : [];
 const same = (a: unknown, b: string) => str(a).toLowerCase().replace(/\s+/g, ' ') === b.trim().toLowerCase().replace(/\s+/g, ' ');
 
-/** Pair each original entry with the AI's entry: by position when counts match, otherwise by matching fields. */
-function pair<T>(original: T[], ai: Obj[], matches: (o: T, a: Obj) => boolean): { matched: (Obj | undefined)[]; mismatch: boolean } {
-  if (ai.length === original.length) return { matched: ai, mismatch: false };
+/**
+ * Pair each original entry with the AI's entry. Position alone is trusted only when every pair also matches
+ * on its fields: an AI that returns the same number of roles but reordered them (newest first, say) would
+ * otherwise glue one employer's achievements onto another. Anything else falls back to matching by fields.
+ */
+function pair<T>(
+  original: T[], ai: Obj[], matches: (o: T, a: Obj) => boolean, aligned: (o: T, a: Obj) => boolean = matches,
+): { matched: (Obj | undefined)[]; mismatch: boolean } {
+  if (ai.length === original.length && original.every((o, i) => aligned(o, ai[i]))) return { matched: ai, mismatch: false };
   return { matched: original.map((o) => ai.find((a) => matches(o, a))), mismatch: ai.length > 0 };
 }
 
@@ -427,14 +447,20 @@ export function applyAiResponse(original: CVData, reply: string, mode: AiMode = 
   const extras = (ai: Obj[], matched: (Obj | undefined)[]) => (fill ? ai.filter((a) => !matched.includes(a)) : []);
 
   const personal = d.personal && typeof d.personal === 'object' ? (d.personal as Obj) : {};
+  // Confirms a same-position pair is the same entry. It checks the name that is never rewritten (a job title
+  // may be polished or translated, a company name may not), and a field the user left empty matches anything,
+  // since the interview is what fills it. A translation keeps the order by instruction, so position is trusted.
+  const blankOr = (a: unknown, mine: string) => !mine.trim() || same(a, mine);
+  const trust = mode === 'translate';
   const aiExp = objects(d.experience);
-  const exp = pair(original.experience, aiExp, (o, a) => same(a.company, o.company) && same(a.jobTitle, o.jobTitle));
+  const exp = pair(original.experience, aiExp, (o, a) => same(a.company, o.company) && same(a.jobTitle, o.jobTitle),
+    (o, a) => trust || (o.company.trim() ? same(a.company, o.company) : blankOr(a.jobTitle, o.jobTitle)));
   if (exp.mismatch && !fill) warnings.push('experience');
   const aiProj = objects(d.projects);
-  const proj = pair(original.projects, aiProj, (o, a) => same(a.name, o.name));
+  const proj = pair(original.projects, aiProj, (o, a) => same(a.name, o.name), (o, a) => trust || blankOr(a.name, o.name));
   if (proj.mismatch && !fill) warnings.push('projects');
   const aiEdu = objects(d.education);
-  const edu = pair(original.education, aiEdu, (o, a) => same(a.school, o.school));
+  const edu = pair(original.education, aiEdu, (o, a) => same(a.school, o.school), (o, a) => trust || blankOr(a.school, o.school));
   const skills = list(d.skills);
 
   const cv: CVData = {
@@ -446,6 +472,8 @@ export function applyAiResponse(original: CVData, reply: string, mode: AiMode = 
       email: keep(original.personal.email, personal.email),
       phone: keep(original.personal.phone, personal.phone),
       location: keep(original.personal.location, personal.location),
+      // Older saved CVs predate this field, so it can be undefined on the stored object.
+      nationality: keep(original.personal.nationality ?? '', personal.nationality),
       linkedin: keep(original.personal.linkedin, personal.linkedin),
       website: keep(original.personal.website, personal.website),
     },

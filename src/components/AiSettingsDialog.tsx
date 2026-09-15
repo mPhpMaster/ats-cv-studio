@@ -24,7 +24,10 @@ const VOICE_PROVIDERS: { id: AiVoiceProvider; label: string }[] = [
 const MODELS: Record<AiProvider, string[]> = {
   anthropic: ['claude-sonnet-5', 'claude-opus-5', 'claude-haiku-4-5-20251001'],
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini'],
-  google: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+  // Only the name Google itself named as current is listed: the 1.5, 2.0 and 2.5 names all answer 404 now,
+  // and guessing at unreleased ones is what put a dead model in front of the user twice. "Other" is the
+  // escape hatch for whatever Google ships next.
+  google: ['gemini-3.6-flash'],
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
   custom: [],
 };

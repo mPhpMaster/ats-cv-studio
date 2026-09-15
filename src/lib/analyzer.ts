@@ -90,6 +90,18 @@ function requiredYears(jd: string): number | null {
 
 const fmtYM = (d: YM) => formatYM(d);
 
+// The Latin names are anchored on word boundaries: unanchored, "oman" matched inside Romania and Woman,
+// which told the report a Bucharest CV was Gulf-targeted — and, since the interview shares this rule, asked
+// that user for a nationality the same report would have penalised them for.
+const GULF_RE = /\b(?:saudi|ksa|riyadh|jeddah|dammam|khobar|uae|emirat[a-z]*|dubai|abu ?dhabi|sharjah|qatar|doha|kuwait|bahrain|manama|oman|muscat)\b|السعوديه|الرياض|جده|الامارات|دبي|ابوظبي|الشارقه|قطر|الدوحه|الكويت|البحرين|عمان|مسقط/i;
+
+/**
+ * Whether a CV is aimed at the Gulf, where nationality is routinely asked for and carries no penalty.
+ * Exported so the interview asks for it in exactly the cases the report tolerates it — one rule, one place:
+ * if these ever disagree, the interview would push the user to fill a field the report then marks against them.
+ */
+export const isGulfLocation = (location: string) => GULF_RE.test(foldArabic(normalize(location)));
+
 export function analyzeCV(cvText: string, jobDescription: string, source: SourceInfo, opts: AnalyzeOptions = {}): AnalysisResult {
   const lang = opts.lang ?? 'en';
   const L = messages[lang];
@@ -535,8 +547,7 @@ export function analyzeCV(cvText: string, jobDescription: string, source: Source
     const items: string[] = [];
     // Nationality is expected on Gulf CVs and routinely asked for, so it is not a red flag there.
     // It stays flagged for CVs aimed elsewhere, where recruiters are told to leave it off.
-    const GULF_RE = /saudi|ksa|riyadh|jeddah|dammam|khobar|uae|emirat|dubai|abu ?dhabi|sharjah|qatar|doha|kuwait|bahrain|manama|oman|muscat|السعوديه|الرياض|جده|الامارات|دبي|ابوظبي|الشارقه|قطر|الدوحه|الكويت|البحرين|عمان|مسقط/i;
-    const gulfTargeted = arabic || GULF_RE.test(foldArabic(normalize(structured.personal.location ?? '')));
+    const gulfTargeted = arabic || isGulfLocation(structured.personal.location ?? '');
     const allowed = gulfTargeted ? ['dob', 'age', 'photo', 'nationality'] : ['dob', 'age', 'photo'];
     const other = personalKeys.filter((k) => !allowed.includes(k));
     if (other.length) items.push(t.personalFound(list(other.map((k) => t.personalNames[k]))));

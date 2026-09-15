@@ -21,7 +21,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * ---------------------------------------------------------------------------------------------------------------- */
 
 function pageProfileReady() {
-  if (!/^\/in\//.test(location.pathname)) return false;
+  // The path alone is not enough: a redirect to any other site's /in/… page must never be read as the profile.
+  if (!/(^|\.)linkedin\.com$/i.test(location.hostname) || !/^\/in\//.test(location.pathname)) return false;
   if (document.querySelector('main h1')) return true;
   // LinkedIn's current (server-driven) profile page has no <h1>: the name is an <h2> that matches "Name | LinkedIn".
   const name = (document.title.split('|')[0] || '').replace(/\s+/g, ' ').trim();
@@ -307,9 +308,18 @@ async function importLinkedInProfile(parent, rawUrl, options = {}, onProgress = 
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  // Other https sites stay reachable in this window, because signing in can pass through an identity provider.
+  // Everything else (file:, data:, custom protocols, plain http) is refused.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!/^https:/i.test(url)) event.preventDefault();
+  });
   let closed = false;
   win.on('closed', () => { closed = true; });
   const alive = () => !closed && !win.isDestroyed();
+  // Text is only ever read while the window is really on LinkedIn, whatever a redirect did in between.
+  const onLinkedIn = () => {
+    try { return /(^|\.)linkedin\.com$/i.test(new URL(win.webContents.getURL()).hostname); } catch { return false; }
+  };
 
   // Once reading starts, re-show the "please wait" notice on every page LinkedIn loads.
   let reading = false;
@@ -349,6 +359,7 @@ async function importLinkedInProfile(parent, rawUrl, options = {}, onProgress = 
       await sleep(800);
     }
 
+    if (!onLinkedIn()) return { ok: false, error: 'failed', message: 'left linkedin.com' };
     win.setTitle(texts.importing);
     reading = true;
     await showOverlay();
@@ -377,7 +388,7 @@ async function importLinkedInProfile(parent, rawUrl, options = {}, onProgress = 
           height = h;
         }
       }
-      data[section] = ready ? await inPage(win, pageReadList).catch(() => []) : [];
+      data[section] = ready && onLinkedIn() ? await inPage(win, pageReadList).catch(() => []) : [];
     }
 
     if (alive()) {
@@ -389,14 +400,15 @@ async function importLinkedInProfile(parent, rawUrl, options = {}, onProgress = 
       const opened = await inPage(win, pageOpenContactInfo).catch(() => false);
       if (!opened) await load(win, `${base}overlay/contact-info/`);
       const contact = await poll(win, pageReadContact, 8000);
-      if (contact) data.contact = contact;
+      if (contact && onLinkedIn()) data.contact = contact;
     }
     report('done');
     return { ok: true, data, usedBrowser };
   } catch (e) {
     return { ok: false, error: closed ? 'cancelled' : 'failed', message: String((e && e.message) || e) };
   } finally {
-    active = null;
+    // Only this import's own window: a second call refused as "busy" must not clear the first one's slot.
+    if (active === win) active = null;
     if (!win.isDestroyed()) win.close();
   }
 }
