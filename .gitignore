@@ -1,0 +1,12 @@
+node_modules
+dist
+
+# Build output: the installer is published as a release asset, never committed
+# (GitHub rejects files over 100 MB inside a repository).
+release
+
+# Local build/editor state
+tsconfig.tsbuildinfo
+*.log
+.DS_Store
+Thumbs.db

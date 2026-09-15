@@ -1,0 +1,89 @@
+{
+  "name": "ats-cv-studio",
+  "productName": "ATS CV Studio",
+  "version": "1.0.0",
+  "description": "Build ATS-friendly CVs and check any CV for ATS compatibility (English & Arabic).",
+  "author": "ATS CV Studio",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "electron:dev": "node scripts/dev-electron.mjs",
+    "electron:start": "vite build && electron .",
+    "dist": "npm run build && electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "dictionary-en": "^4.0.0",
+    "docx": "^9.7.1",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "jszip": "^3.10.2",
+    "mammoth": "^1.12.3",
+    "nspell": "^2.1.5",
+    "pdfjs-dist": "^6.3.289",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0"
+  },
+  "build": {
+    "appId": "com.atscvstudio.app",
+    "productName": "ATS CV Studio",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "build/icon.png",
+      "package.json",
+      "node_modules/sql.js/dist/**",
+      "node_modules/sql.js/package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "ATS-CV-Studio-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "ATS-CV-Studio-Portable-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ATS CV Studio",
+      "uninstallDisplayName": "ATS CV Studio",
+      "multiLanguageInstaller": true,
+      "installerLanguages": [
+        "en_US",
+        "ar_SA"
+      ]
+    },
+    "electronDist": "node_modules/electron/dist"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-sans-arabic": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
+    "@fontsource/sora": "^5.3.0",
+    "sql.js": "^1.13.0"
+  }
+}
