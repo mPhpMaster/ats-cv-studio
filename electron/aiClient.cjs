@@ -159,12 +159,17 @@ async function callAi(options, fetchImpl) {
   if (!res.ok) {
     let detail = '';
     try { detail = await res.text(); } catch { /* body already consumed or empty */ }
-    const error = res.status === 401 || res.status === 403 ? 'auth'
-      : res.status === 429 ? 'rate-limit'
-        : res.status === 404 ? 'not-found'
-          : res.status === 400 || res.status === 422 ? 'bad-request'
-            : 'http';
-    return { ok: false, error, message: scrub(`${res.status} ${providerMessage(detail)}`, apiKey) };
+    const reason = providerMessage(detail);
+    // Providers report "out of credit" inconsistently: Anthropic sends 400, OpenAI sends 429, some send 402.
+    // Classifying on the wording keeps the user from being told to check a model name that is perfectly fine.
+    const outOfCredit = /credit balance|billing|insufficient (?:funds|quota|credits?)|exceeded your current quota|payment required/i.test(reason);
+    const error = outOfCredit || res.status === 402 ? 'billing'
+      : res.status === 401 || res.status === 403 ? 'auth'
+        : res.status === 429 ? 'rate-limit'
+          : res.status === 404 ? 'not-found'
+            : res.status === 400 || res.status === 422 ? 'bad-request'
+              : 'http';
+    return { ok: false, error, message: scrub(`${res.status} ${reason}`, apiKey) };
   }
 
   let data = null;

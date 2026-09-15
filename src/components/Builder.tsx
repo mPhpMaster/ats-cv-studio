@@ -110,6 +110,12 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
   const [aiMode, setAiMode] = useState<AiMode | null>(null);
   const jsonInput = useRef<HTMLInputElement>(null);
   const importMenu = useRef<HTMLDetailsElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  /** Open or close every editor section at once. Panels stay individually toggleable afterwards. */
+  const setAllPanels = (open: boolean) => {
+    editorRef.current?.querySelectorAll<HTMLDetailsElement>('details.panel').forEach((panel) => { panel.open = open; });
+  };
 
   const spell = useSpellChecker();
   const lang = cvLang(cv);
@@ -299,7 +305,11 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
       )}
 
       <div className="builder-grid">
-        <div className="editor no-print">
+        <div className="editor no-print" ref={editorRef}>
+          <div className="row-actions panel-tools">
+            <button type="button" onClick={() => setAllPanels(true)}>⤢ {b.expandAll}</button>
+            <button type="button" onClick={() => setAllPanels(false)}>⤡ {b.collapseAll}</button>
+          </div>
           <Panel title={b.targetJob} defaultOpen={!jobDescription}>
             <Area label={b.targetJobLabel} rows={5} value={jobDescription} onChange={setJobDescription} placeholder={b.targetJobPlaceholder} />
           </Panel>

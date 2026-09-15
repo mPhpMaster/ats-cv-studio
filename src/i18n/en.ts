@@ -107,6 +107,8 @@ export const en = {
     aiEnhance: 'Enhance with AI',
     aiFix: 'Fix issues with AI',
     aiInterview: 'Complete with AI questions',
+    expandAll: 'Expand all',
+    collapseAll: 'Collapse all',
   },
 
   ai: {
@@ -149,7 +151,8 @@ export const en = {
       'rate-limit': 'The provider is rate-limiting or out of quota. Wait a moment and try again.',
       network: 'Could not reach the provider. Check your internet connection.',
       http: 'The provider returned an error. Try again, or copy the prompt manually.',
-      'bad-request': 'The provider rejected the request. This is almost always a model name it does not recognise — check the Model field below.',
+      'bad-request': 'The provider rejected the request. Check the model name below, and read the provider’s own message underneath.',
+      billing: 'Your account with this provider has no credit left. Add credit on the provider’s billing page, or switch to another provider below.',
       empty: 'The AI replied with nothing. Try again.',
       'bad-response': 'The provider’s reply could not be read.',
       'not-found': 'That model or endpoint was not found. Check the model name.',
