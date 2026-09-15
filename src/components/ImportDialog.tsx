@@ -15,7 +15,7 @@ interface Props {
 }
 
 export default function ImportDialog({ tab, onTab, onClose, onImported }: Props) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
@@ -82,7 +82,8 @@ export default function ImportDialog({ tab, onTab, onClose, onImported }: Props)
     const unsubscribe = window.desktop?.onLinkedinProgress?.((update) => setLinkStage(update));
     run(async () => {
       try {
-        const result = await window.desktop!.linkedinImport!(url, { useChrome });
+        // The wait notice is shown inside the LinkedIn window by the main process, which needs to be told the UI language.
+        const result = await window.desktop!.linkedinImport!(url, { useChrome, lang });
         if (!result.ok) {
           const messages = {
             'invalid-url': t.importer.linkInvalid,

@@ -37,7 +37,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = lang;
     document.documentElement.dir = t.dir;
-    document.title = lang === 'ar' ? 'استوديو السيرة الذاتية ATS' : 'ATS CV Studio';
+    document.title = `${lang === 'ar' ? 'استوديو السيرة الذاتية ATS' : 'ATS CV Studio'} ${__APP_VERSION__}`;
   }, [lang, t.dir]);
 
   const i18n = useMemo(() => ({ lang, t, setLang }), [lang, t, setLang]);
@@ -55,7 +55,7 @@ export default function App() {
           <div className="brand">
             <span className="logo">ATS</span>
             <div>
-              <strong>{t.app.title}</strong>
+              <strong>{t.app.title} <span className="app-version" dir="ltr">v{__APP_VERSION__}</span></strong>
               <small>{t.app.subtitle}</small>
             </div>
           </div>

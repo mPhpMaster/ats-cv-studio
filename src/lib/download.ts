@@ -5,7 +5,7 @@ interface DesktopBridge {
   saveFile(name: string, data: ArrayBuffer): Promise<boolean>;
   printToPdf(name: string): Promise<boolean>;
   /** Opens the profile in a LinkedIn window (reusing the browser login when possible) and returns its visible text. */
-  linkedinImport?(url: string, options?: { useChrome?: boolean }): Promise<LinkedInImportResult>;
+  linkedinImport?(url: string, options?: { useChrome?: boolean; lang?: string }): Promise<LinkedInImportResult>;
   /** Subscribe to LinkedIn import progress; returns an unsubscribe function. */
   onLinkedinProgress?(callback: (update: { stage: string; detail?: string }) => void): () => void;
   /** Current AI provider settings. The API key itself never crosses into the renderer — only `hasKey`. */
@@ -13,9 +13,16 @@ interface DesktopBridge {
   aiSettingsSet?(patch: Partial<AiSettingsPatch>): Promise<AiSettings>;
   /** Sends the prompt to the configured provider from the main process and returns its raw reply. */
   aiComplete?(prompt: string): Promise<AiCompletion>;
+  /** Multi-turn version: send the whole conversation so the assistant remembers what it already asked. */
+  aiChat?(messages: AiMessage[]): Promise<AiCompletion>;
 }
 
 export type AiProvider = 'anthropic' | 'openai' | 'google' | 'deepseek' | 'custom';
+
+export interface AiMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export interface AiSettings {
   provider: AiProvider;

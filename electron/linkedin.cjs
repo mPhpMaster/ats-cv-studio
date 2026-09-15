@@ -227,11 +227,27 @@ function pageShowImportOverlay(texts) {
   return true;
 }
 
-const OVERLAY_TEXTS = [
-  'جاري استيراد بروفايلك… يرجى الانتظار',
-  'Importing your profile… please wait',
-  'ستُغلق هذه النافذة تلقائيًا عند الانتهاء · This window closes automatically when done',
-];
+/** Shown inside the LinkedIn window, in the language the user set for the app itself. */
+const TEXTS = {
+  en: {
+    overlay: [
+      'Importing your profile… please wait',
+      'Please keep this window open',
+      'It closes automatically when the import is done',
+    ],
+    signIn: 'LinkedIn — sign in to continue the import',
+    importing: 'LinkedIn — importing your profile, please wait…',
+  },
+  ar: {
+    overlay: [
+      'جارٍ استيراد بروفايلك… يرجى الانتظار',
+      'من فضلك أبقِ هذه النافذة مفتوحة',
+      'ستُغلق تلقائيًا عند انتهاء الاستيراد',
+    ],
+    signIn: 'LinkedIn — سجّل الدخول لإكمال الاستيراد',
+    importing: 'LinkedIn — جارٍ استيراد بروفايلك، يرجى الانتظار…',
+  },
+};
 
 /* ------------------------------------------------------------------------------------------------------------------ */
 
@@ -271,6 +287,7 @@ async function importLinkedInProfile(parent, rawUrl, options = {}, onProgress = 
   };
   // Browser cookies are read only when the user explicitly opted in (a missing option means off).
   const useChrome = options.useChrome === true;
+  const texts = TEXTS[options.lang === 'ar' ? 'ar' : 'en'];
   if (active && !active.isDestroyed()) {
     active.focus();
     return { ok: false, error: 'busy' };
@@ -297,7 +314,7 @@ async function importLinkedInProfile(parent, rawUrl, options = {}, onProgress = 
   // Once reading starts, re-show the "please wait" notice on every page LinkedIn loads.
   let reading = false;
   const showOverlay = () =>
-    win.webContents.executeJavaScript(`(${pageShowImportOverlay.toString()})(${JSON.stringify(OVERLAY_TEXTS)})`, true).catch(() => {});
+    win.webContents.executeJavaScript(`(${pageShowImportOverlay.toString()})(${JSON.stringify(texts.overlay)})`, true).catch(() => {});
   win.webContents.on('dom-ready', () => { if (reading) showOverlay(); });
 
   let usedBrowser = null;
@@ -321,7 +338,7 @@ async function importLinkedInProfile(parent, rawUrl, options = {}, onProgress = 
       const onLogin = LOGIN_PATH_RE.test(current.pathname);
       if (onLogin) {
         report('signin');
-        win.setTitle('LinkedIn — sign in to continue the import');
+        win.setTitle(texts.signIn);
       }
       // After signing in LinkedIn lands on the feed; send the window back to the profile.
       if (!onLogin && !/^\/in\//.test(current.pathname) && /(^|\.)linkedin\.com$/i.test(current.hostname)
@@ -332,7 +349,7 @@ async function importLinkedInProfile(parent, rawUrl, options = {}, onProgress = 
       await sleep(800);
     }
 
-    win.setTitle('LinkedIn — importing your profile, please wait…');
+    win.setTitle(texts.importing);
     reading = true;
     await showOverlay();
     report('profile');

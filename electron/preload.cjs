@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('desktop', {
   aiSettingsGet: () => ipcRenderer.invoke('ai-settings-get'),
   aiSettingsSet: (patch) => ipcRenderer.invoke('ai-settings-set', patch),
   aiComplete: (prompt) => ipcRenderer.invoke('ai-complete', { prompt }),
+  aiChat: (messages) => ipcRenderer.invoke('ai-chat', { messages }),
   onLinkedinProgress: (callback) => {
     const handler = (_event, update) => callback(update);
     ipcRenderer.on('linkedin-progress', handler);

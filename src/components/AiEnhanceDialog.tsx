@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../i18n';
 import { AiResponseError, applyAiResponse, buildAiPrompt, gapLines, issueLines, type AiApplyResult, type AiMode } from '../lib/aiPrompt';
-import type { AiProvider, AiSettings, AiSettingsPatch } from '../lib/download';
+import type { AiMessage, AiProvider, AiSettings, AiSettingsPatch } from '../lib/download';
 import type { AnalysisResult, CVData } from '../types';
 
 const PROVIDERS: { id: AiProvider; label: string }[] = [
@@ -65,6 +65,10 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
   const [keyInput, setKeyInput] = useState('');
   const [savedFlash, setSavedFlash] = useState(false);
   const [running, setRunning] = useState(false);
+  /** The running interview: the whole conversation is kept so the assistant remembers what it already asked. */
+  const [chat, setChat] = useState<AiMessage[] | null>(null);
+  const [answer, setAnswer] = useState('');
+  const canChat = typeof window !== 'undefined' && typeof window.desktop?.aiChat === 'function';
   /** Only the desktop build can reach a provider directly; the web build keeps the copy/paste flow. */
   const canRunAuto = typeof window !== 'undefined' && typeof window.desktop?.aiComplete === 'function';
   /** A hosted provider needs a key; a custom endpoint needs a URL instead. */
@@ -128,6 +132,43 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
       setRunning(false);
     }
   }
+
+  /**
+   * One turn of the interview. The assistant either asks the next question or sends the finished CV, and the
+   * only reliable way to tell them apart is to try to apply the reply: a question will not parse as a CV.
+   */
+  async function sendTurn(history: AiMessage[]) {
+    setError('');
+    setErrorDetail('');
+    setChat(history);
+    setRunning(true);
+    try {
+      const res = await window.desktop!.aiChat!(history);
+      if (!res.ok) {
+        setError((a.aiErrors as Record<string, string>)[res.error] ?? a.aiErrors.http);
+        setErrorDetail(res.message ?? '');
+        return;
+      }
+      setChat([...history, { role: 'assistant', content: res.text }]);
+      try {
+        const applied = applyAiResponse(cv, res.text, 'interview');
+        const after = analyze(applied.cv);
+        setReply(res.text);
+        setPreview({ ...applied, score: after.score, remaining: issueLines(after) });
+      } catch {
+        /* Not the final CV yet — the reply is the next question, already shown in the transcript. */
+      }
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const startChat = () => sendTurn([{ role: 'user', content: prompt }]);
+
+  const answerChat = (text: string) => {
+    setAnswer('');
+    sendTurn([...(chat ?? []), { role: 'user', content: text }]);
+  };
 
   async function saveSettings(patch: Partial<AiSettingsPatch>) {
     // Switching provider resets the model in the main process, so drop back to its picker too.
@@ -211,6 +252,45 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
                 </label>
                 {!hasJob && <p className="muted small-note">{a.tailorNeedsJob}</p>}
               </>
+            )}
+
+            {mode === 'interview' && canChat && aiReady && (
+              <section className="import-option">
+                <h3>🗨 {a.chatStart}</h3>
+                <p className="muted small-note">{a.chatIntro}</p>
+
+                {chat && chat.length > 1 && (
+                  <div className="ai-change">
+                    <h4>{a.chatQuestionCount(chat.filter((m) => m.role === 'assistant').length)}</h4>
+                    <ul dir="auto">
+                      {chat.slice(1).map((m, i) => (
+                        <li key={i}>
+                          <strong>{m.role === 'assistant' ? a.chatAi : a.chatYou}: </strong>
+                          {m.content}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {running && <p className="hint">{a.chatThinking}</p>}
+
+                {!chat && !running && (
+                  <button className="primary" onClick={startChat}>🗨 {a.chatStart}</button>
+                )}
+
+                {chat && !running && (
+                  <>
+                    <textarea rows={3} dir="auto" value={answer} placeholder={a.chatAnswerPh}
+                      onChange={(e) => setAnswer(e.target.value)} />
+                    <div className="row-actions">
+                      <button className="primary" disabled={!answer.trim()} onClick={() => answerChat(answer)}>{a.chatSend}</button>
+                      <button onClick={() => answerChat('skip')}>{a.chatSkip}</button>
+                      <button onClick={() => { setChat(null); setAnswer(''); }}>{a.chatRestart}</button>
+                    </div>
+                  </>
+                )}
+              </section>
             )}
 
             {canRunAuto && (

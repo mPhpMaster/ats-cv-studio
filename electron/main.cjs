@@ -25,7 +25,7 @@ function createWindow() {
     height: 920,
     minWidth: 960,
     minHeight: 640,
-    title: 'ATS CV Studio',
+    title: `ATS CV Studio ${app.getVersion()}`,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     backgroundColor: '#f4f5fa',
     autoHideMenuBar: true,
@@ -100,6 +100,12 @@ ipcMain.handle('ai-settings-set', (_event, patch) => publicSettings(writeSetting
 ipcMain.handle('ai-complete', async (_event, { prompt }) => {
   const settings = readSettings(app.getPath('userData'));
   return callAi({ ...settings, prompt: String(prompt ?? '') });
+});
+
+// Multi-turn version: the whole conversation is sent each time, so the assistant remembers its own questions.
+ipcMain.handle('ai-chat', async (_event, { messages }) => {
+  const settings = readSettings(app.getPath('userData'));
+  return callAi({ ...settings, messages: Array.isArray(messages) ? messages : [] });
 });
 
 app.on('second-instance', () => {

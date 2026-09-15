@@ -78,27 +78,29 @@ const scrub = (text, apiKey) => {
   return key.length >= MIN_SECRET ? s.split(key).join('***') : s;
 };
 
-function buildRequest({ provider, apiKey, model, base, prompt }) {
+/** `messages` is the whole conversation, so the same call serves a one-shot prompt and a running interview. */
+function buildRequest({ provider, apiKey, model, base, messages }) {
   const json = { 'content-type': 'application/json' };
   if (provider === 'anthropic') {
     return {
       url: `${base}/v1/messages`,
       headers: { ...json, 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: { model, max_tokens: 8000, messages: [{ role: 'user', content: prompt }] },
+      body: { model, max_tokens: 8000, messages },
     };
   }
   if (provider === 'google') {
     return {
       url: `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
       headers: json,
-      body: { contents: [{ parts: [{ text: prompt }] }] },
+      // Google calls the assistant's turns "model" rather than "assistant".
+      body: { contents: messages.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })) },
     };
   }
-  // openai and custom share the OpenAI chat-completions shape.
+  // openai, deepseek and custom share the OpenAI chat-completions shape.
   return {
     url: `${base}/v1/chat/completions`,
     headers: apiKey ? { ...json, authorization: `Bearer ${apiKey}` } : json,
-    body: { model, messages: [{ role: 'user', content: prompt }] },
+    body: { model, messages },
   };
 }
 
@@ -146,15 +148,22 @@ async function callAi(options, fetchImpl) {
   const apiKey = trim(options.apiKey);
   const model = trim(options.model) || preset.model;
   const base = (trim(options.baseUrl) || preset.base).replace(/\/+$/, '');
+  // Either a single prompt or a full conversation; both end up as a messages array.
+  const turns = Array.isArray(options.messages)
+    ? options.messages
+      .filter((m) => m && typeof m.content === 'string' && m.content.trim())
+      .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }))
+    : [];
   const prompt = typeof options.prompt === 'string' ? options.prompt : '';
+  const messages = turns.length ? turns : (prompt.trim() ? [{ role: 'user', content: prompt }] : []);
 
-  if (!prompt.trim()) return { ok: false, error: 'no-prompt' };
+  if (!messages.length) return { ok: false, error: 'no-prompt' };
   if (!base) return { ok: false, error: 'no-base-url' };
   if (!model) return { ok: false, error: 'no-model' };
   // A custom endpoint may legitimately need no key (a local model); the hosted providers always do.
   if (provider !== 'custom' && !apiKey) return { ok: false, error: 'no-key' };
 
-  const { url, headers, body } = buildRequest({ provider, apiKey, model, base, prompt });
+  const { url, headers, body } = buildRequest({ provider, apiKey, model, base, messages });
 
   let res;
   try {

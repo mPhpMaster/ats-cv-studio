@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useI18n } from '../i18n';
 import { analyzeCV, leadingActionVerb } from '../lib/analyzer';
 import { gapLines, type AiMode } from '../lib/aiPrompt';
@@ -234,6 +234,28 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
     setTimeout(() => savePdf(baseName), showText ? 80 : 0);
   }
 
+  const saveJson = () =>
+    downloadBlob(new Blob([JSON.stringify(cv, null, 2)], { type: 'application/json' }), `${baseName}.json`);
+
+  // Ctrl+S saves the JSON backup, Ctrl+O opens one, Ctrl+Shift+S saves the PDF.
+  // Ignored while a dialog is open, so the shortcut never fires behind the user's back.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || importTab || aiMode) return;
+      const key = e.key.toLowerCase();
+      if (key === 's') {
+        e.preventDefault();
+        if (e.shiftKey) onPdf();
+        else saveJson();
+      } else if (key === 'o' && !e.shiftKey) {
+        e.preventDefault();
+        jsonInput.current?.click();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   function onImportJson(file: File) {
     file.text().then((raw) => {
       try {
@@ -271,7 +293,7 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
             <div className="menu">
               <button onClick={() => openImport('file')}>📄 {b.importFile}</button>
               <button onClick={() => openImport('linkedin')}>in {b.importLinkedIn}</button>
-              <button onClick={() => openImport('json')}>{'{ }'} {b.importJson}</button>
+              <button title="Ctrl+O" onClick={() => openImport('json')}>{'{ }'} {b.importJson}</button>
             </div>
           </details>
           <input ref={jsonInput} type="file" accept=".json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onImportJson(f); }} />
@@ -284,14 +306,14 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
           </button>
           <button onClick={() => setCv(sampleCV(lang))}>{b.loadSample}</button>
           <button onClick={() => confirm(b.confirmClear) && setCv({ ...emptyCV(lang), design: cv.design })}>{b.newBlank}</button>
-          <button onClick={() => downloadBlob(new Blob([JSON.stringify(cv, null, 2)], { type: 'application/json' }), `${baseName}.json`)}>{b.saveJson}</button>
+          <button title="Ctrl+S" onClick={saveJson}>{b.saveJson}</button>
         </div>
         <div className="group">
           <div className="segmented" role="group" aria-label={b.cvLanguage} title={b.cvLanguage}>
             <button className={lang === 'en' ? 'active' : ''} onClick={() => changeCvLanguage('en')}>EN</button>
             <button className={lang === 'ar' ? 'active' : ''} onClick={() => changeCvLanguage('ar')}>ع</button>
           </div>
-          <button className="primary" onClick={onPdf}>{b.downloadPdf}</button>
+          <button className="primary" title="Ctrl+Shift+S" onClick={onPdf}>{b.downloadPdf}</button>
           <button className="primary" onClick={onDocx} disabled={busy}>{busy ? b.building : b.downloadDocx}</button>
           <button onClick={() => downloadBlob(new Blob([text], { type: 'text/plain;charset=utf-8' }), `${baseName}.txt`)}>{b.txt}</button>
         </div>
