@@ -13,24 +13,17 @@ interface Props {
   onApplied: (cv: CVData, source: string) => void;
 }
 
-/** Minimal shape of the browser speech API, which TypeScript's DOM types do not declare. */
-interface Recognition {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onerror: ((e: { error: string }) => void) | null;
-  onend: (() => void) | null;
-}
-type RecognitionCtor = new () => Recognition;
-
-const recognitionCtor = (): RecognitionCtor | null => {
-  const w = window as unknown as { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
-};
+/**
+ * Voice answers record audio and send it to the provider's speech-to-text endpoint.
+ * Chrome's own SpeechRecognition is deliberately not used: in Electron it always ends in "error: network",
+ * because it uploads to a Google service with a key baked into Chrome that Electron builds do not carry.
+ */
+const blobToBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(new Error('read failed'));
+  reader.onloadend = () => resolve(String(reader.result).split(',')[1] ?? '');
+  reader.readAsDataURL(blob);
+});
 
 /**
  * The interview on its own page: the assistant asks, the user answers by typing or by voice, and the app
@@ -50,8 +43,9 @@ export default function InterviewPage({ cv, jobDescription, onApplied }: Props) 
   const [micNote, setMicNote] = useState('');
   const [finished, setFinished] = useState<{ cv: CVData; notes: string[]; before: number; after: number } | null>(null);
 
-  const recognition = useRef<Recognition | null>(null);
-  const transcript = useRef('');
+  const [transcribing, setTranscribing] = useState(false);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const chunks = useRef<Blob[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
   const canChat = typeof window !== 'undefined' && typeof window.desktop?.aiChat === 'function';
@@ -69,7 +63,12 @@ export default function InterviewPage({ cv, jobDescription, onApplied }: Props) 
   const question = [...visible].reverse().find((m) => m.role === 'assistant')?.content ?? '';
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [chat, running]);
-  useEffect(() => () => { try { recognition.current?.abort(); } catch { /* already gone */ } }, []);
+  useEffect(() => () => {
+    try {
+      recorder.current?.stream.getTracks().forEach((t) => t.stop());
+      if (recorder.current?.state === 'recording') recorder.current.stop();
+    } catch { /* already gone */ }
+  }, []);
 
   async function sendTurn(history: AiMessage[]) {
     setError('');
@@ -106,43 +105,59 @@ export default function InterviewPage({ cv, jobDescription, onApplied }: Props) 
 
   function stopListening() {
     setListening(false);
-    try { recognition.current?.stop(); } catch { /* not running */ }
+    try {
+      if (recorder.current?.state === 'recording') recorder.current.stop();
+    } catch { /* not running */ }
   }
 
-  function startListening() {
+  /** Sends the finished recording to the provider and drops the transcription into the answer box. */
+  async function transcribe(blob: Blob) {
+    if (!blob.size) { setMicNote(v.micNothing); return; }
+    if (typeof window.desktop?.aiTranscribe !== 'function') { setMicNote(v.micUnsupported); return; }
+    setTranscribing(true);
+    try {
+      const res = await window.desktop.aiTranscribe(
+        await blobToBase64(blob),
+        blob.type || 'audio/webm',
+        lang === 'ar' ? 'ar' : 'en',
+      );
+      if (!res.ok) {
+        setMicNote(res.error === 'no-transcription' ? v.micNoProvider
+          : res.error === 'no-key' ? v.needsKey
+            : res.error === 'empty' ? v.micNothing : v.micFailed);
+        return;
+      }
+      setAnswer((current) => (current.trim() ? `${current.trim()} ${res.text}` : res.text));
+    } catch {
+      setMicNote(v.micFailed);
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
+  async function startListening() {
     setMicNote('');
-    const Ctor = recognitionCtor();
-    if (!Ctor) {
+    if (typeof navigator.mediaDevices?.getUserMedia !== 'function' || typeof window.MediaRecorder !== 'function') {
       setMicNote(v.micUnsupported);
       return;
     }
-    const rec = new Ctor();
-    recognition.current = rec;
-    rec.lang = lang === 'ar' ? 'ar-SA' : 'en-US';
-    rec.interimResults = true;
-    rec.continuous = false;
-    transcript.current = '';
-    rec.onresult = (e) => {
-      let text = '';
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      transcript.current = text;
-      setAnswer(text);
-    };
-    rec.onerror = (e) => {
-      setListening(false);
-      setMicNote(e.error === 'not-allowed' || e.error === 'service-not-allowed' ? v.micDenied
-        : e.error === 'no-speech' ? v.micNothing : v.micUnsupported);
-    };
-    rec.onend = () => {
-      setListening(false);
-      if (!transcript.current.trim()) setMicNote((note) => note || v.micNothing);
-    };
+    let stream: MediaStream;
     try {
-      rec.start();
-      setListening(true);
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      setMicNote(v.micUnsupported);
+      setMicNote(v.micDenied);
+      return;
     }
+    const rec = new MediaRecorder(stream);
+    recorder.current = rec;
+    chunks.current = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.current.push(e.data); };
+    rec.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      void transcribe(new Blob(chunks.current, { type: rec.mimeType || 'audio/webm' }));
+    };
+    rec.start();
+    setListening(true);
   }
 
   if (!canChat) {
@@ -189,7 +204,8 @@ export default function InterviewPage({ cv, jobDescription, onApplied }: Props) 
             <textarea rows={4} dir="auto" value={answer} placeholder={v.answerPh} autoFocus
               onChange={(e) => setAnswer(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send(answer); }} />
-            {listening && <p className="hint">🎙 {v.micListening}</p>}
+            {listening && <p className="hint">🎙 {v.micRecording}</p>}
+            {transcribing && <p className="hint">{v.micTranscribing}</p>}
             {micNote && <p className="muted small-note">{micNote}</p>}
             <div className="row-actions">
               <button className="primary" disabled={!answer.trim()} onClick={() => send(answer)}>{v.send}</button>

@@ -194,4 +194,84 @@ async function callAi(options, fetchImpl) {
   return text ? { ok: true, text } : { ok: false, error: 'empty' };
 }
 
-module.exports = { callAi, readSettings, writeSettings, publicSettings, PROVIDERS, _internals: { buildRequest, extractText, scrub } };
+/**
+ * Turns recorded audio into text. Chrome's own SpeechRecognition cannot be used here: it uploads to a Google
+ * service with a key baked into Chrome itself, which Electron builds do not carry, so it always ends in
+ * "error: network". Instead the audio goes to the provider the user already configured — where that provider
+ * offers transcription at all.
+ */
+async function transcribeAudio(options, fetchImpl) {
+  const doFetch = fetchImpl || globalThis.fetch;
+  const provider = options && PROVIDERS[options.provider] ? options.provider : '';
+  if (!provider) return { ok: false, error: 'bad-provider' };
+  // Anthropic and DeepSeek have no speech-to-text endpoint; saying so beats a vague failure.
+  if (provider === 'anthropic' || provider === 'deepseek') return { ok: false, error: 'no-transcription' };
+
+  const apiKey = trim(options.apiKey);
+  const base = (trim(options.baseUrl) || PROVIDERS[provider].base).replace(/\/+$/, '');
+  const audio = typeof options.audio === 'string' ? options.audio : '';
+  const mimeType = trim(options.mimeType) || 'audio/webm';
+  const language = trim(options.language);
+  if (!audio) return { ok: false, error: 'no-audio' };
+  if (provider !== 'custom' && !apiKey) return { ok: false, error: 'no-key' };
+
+  let res;
+  try {
+    if (provider === 'google') {
+      // Gemini takes the audio inline and is asked to write down what it hears.
+      const model = trim(options.model) || 'gemini-2.0-flash';
+      res = await doFetch(`${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: 'Transcribe this audio exactly as spoken. Reply with the transcription only, no commentary.' },
+              { inline_data: { mime_type: mimeType, data: audio } },
+            ],
+          }],
+        }),
+      });
+    } else {
+      // OpenAI-compatible speech-to-text takes a multipart upload.
+      const form = new FormData();
+      form.append('file', new Blob([Buffer.from(audio, 'base64')], { type: mimeType }), 'answer.webm');
+      form.append('model', trim(options.model) || 'whisper-1');
+      if (language) form.append('language', language);
+      res = await doFetch(`${base}/v1/audio/transcriptions`, {
+        method: 'POST',
+        headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {},
+        body: form,
+      });
+    }
+  } catch (e) {
+    return { ok: false, error: 'network', message: scrub(e && e.message ? e.message : e, apiKey) };
+  }
+
+  if (!res.ok) {
+    let detail = '';
+    try { detail = await res.text(); } catch { /* empty body */ }
+    const reason = providerMessage(detail);
+    const error = /credit balance|billing|insufficient|exceeded your current quota/i.test(reason) ? 'billing'
+      : res.status === 401 || res.status === 403 ? 'auth'
+        : res.status === 429 ? 'rate-limit'
+          : res.status === 404 ? 'no-transcription'
+            : 'http';
+    return { ok: false, error, message: scrub(`${res.status} ${reason}`, apiKey) };
+  }
+
+  let data = null;
+  try { data = await res.json(); } catch { return { ok: false, error: 'bad-response' }; }
+  const text = provider === 'google' ? extractText('google', data) : trim(data && data.text);
+  return text ? { ok: true, text } : { ok: false, error: 'empty' };
+}
+
+module.exports = {
+  callAi,
+  transcribeAudio,
+  readSettings,
+  writeSettings,
+  publicSettings,
+  PROVIDERS,
+  _internals: { buildRequest, extractText, scrub, providerMessage },
+};

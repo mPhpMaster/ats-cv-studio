@@ -15,6 +15,8 @@ interface DesktopBridge {
   aiComplete?(prompt: string): Promise<AiCompletion>;
   /** Multi-turn version: send the whole conversation so the assistant remembers what it already asked. */
   aiChat?(messages: AiMessage[]): Promise<AiCompletion>;
+  /** Sends recorded audio (base64) to the provider's speech-to-text endpoint and returns what was said. */
+  aiTranscribe?(audio: string, mimeType: string, language: string): Promise<AiCompletion>;
 }
 
 export type AiProvider = 'anthropic' | 'openai' | 'google' | 'deepseek' | 'custom';

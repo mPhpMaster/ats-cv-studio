@@ -3,7 +3,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { importLinkedInProfile } = require('./linkedin.cjs');
-const { callAi, readSettings, writeSettings, publicSettings } = require('./aiClient.cjs');
+const { callAi, transcribeAudio, readSettings, writeSettings, publicSettings } = require('./aiClient.cjs');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const FILTERS = {
@@ -40,6 +40,14 @@ function createWindow() {
       spellcheck: true,
     },
   });
+
+  // Voice answers need the microphone, so 'media' is granted; everything else a page could ask for
+  // (location, notifications, clipboard reads, MIDI, ...) is refused outright. Granting 'media' also
+  // covers the camera, which this app never requests.
+  const allowed = new Set(['media', 'audioCapture']);
+  const session = mainWindow.webContents.session;
+  session.setPermissionRequestHandler((_contents, permission, callback) => callback(allowed.has(permission)));
+  session.setPermissionCheckHandler((_contents, permission) => allowed.has(permission));
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
 
@@ -102,6 +110,19 @@ ipcMain.handle('ai-settings-set', (_event, patch) => publicSettings(writeSetting
 ipcMain.handle('ai-complete', async (_event, { prompt }) => {
   const settings = readSettings(app.getPath('userData'));
   return callAi({ ...settings, prompt: String(prompt ?? '') });
+});
+
+// Speech to text. The transcription model is separate from the chat model, so the chat one is not passed on.
+ipcMain.handle('ai-transcribe', async (_event, { audio, mimeType, language }) => {
+  const settings = readSettings(app.getPath('userData'));
+  return transcribeAudio({
+    provider: settings.provider,
+    apiKey: settings.apiKey,
+    baseUrl: settings.baseUrl,
+    audio: String(audio ?? ''),
+    mimeType: String(mimeType ?? ''),
+    language: String(language ?? ''),
+  });
 });
 
 // Multi-turn version: the whole conversation is sent each time, so the assistant remembers its own questions.
