@@ -455,6 +455,18 @@ button.chip:hover { border-color: var(--fail); color: var(--fail); }
 .ai-change h4 { margin: 0 0 6px; }
 .ai-change p, .ai-change ul { margin: 0; }
 
+/* ---------- Interview page ---------- */
+.interview-page .card { max-width: 920px; margin: 0 auto; }
+.interview-page textarea { font-size: 15px; }
+.chat-log {
+  display: flex; flex-direction: column; gap: 10px; margin: 14px 0; padding: 14px;
+  max-height: 46vh; overflow: auto;
+  background: var(--editor); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.chat-log p { margin: 0; padding: 10px 13px; border-radius: var(--radius-sm); max-width: 88%; line-height: 1.5; }
+.chat-ai { background: var(--surface); border: 1px solid var(--border); align-self: flex-start; }
+.chat-you { background: var(--accent-faint); align-self: flex-end; }
+
 @media print {
   @page { size: A4; margin: 14mm 15mm; }
   body { background: #fff; }

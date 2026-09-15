@@ -284,6 +284,14 @@ export function parseCVText(raw: string): CVData {
     .filter(Boolean);
   p.location = segments.find((s) => s !== p.fullName && s !== p.title && looksLikeLocation(s)) ?? '';
 
+  // Nationality is written as a labelled item ("Nationality: Palestinian"), and `segments` above strips that
+  // label — so it has to be read from the head before the label is thrown away, or importing loses it.
+  const NATIONALITY_RE = /^(?:nationality|الجنسية|الجنسيه)\s*[:：]\s*(.+)$/iu;
+  p.nationality = head
+    .flatMap((l) => l.split(/\s*[|•·▪◦]\s*|\t|\s{3,}/))
+    .map((s) => clean(s).match(NATIONALITY_RE)?.[1] ?? '')
+    .find(Boolean) ?? '';
+
   const summary = sections.get('summary') ?? head.filter((l) => wordCount(l) >= 12 && l !== p.title);
   cv.summary = summary.map(stripBullet).join(' ').trim();
   cv.experience = toExperience(sections.get('experience') ?? [], lang);

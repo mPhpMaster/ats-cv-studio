@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import Builder from './components/Builder';
 import Checker from './components/Checker';
+import InterviewPage from './components/InterviewPage';
 import { I18nContext, messages } from './i18n';
 import { sampleCV } from './lib/sample';
 import type { CVData, Lang } from './types';
 
-type Tab = 'build' | 'check';
+type Tab = 'build' | 'check' | 'interview';
 
 function usePersistent<T>(key: string, initial: () => T) {
   const [value, setValue] = useState<T>(() => {
@@ -66,6 +67,9 @@ export default function App() {
             <button role="tab" aria-selected={tab === 'check'} className={tab === 'check' ? 'active' : ''} onClick={() => setTab('check')}>
               {t.app.tabCheck}
             </button>
+            <button role="tab" aria-selected={tab === 'interview'} className={tab === 'interview' ? 'active' : ''} onClick={() => setTab('interview')}>
+              🗨 {t.interview.tab}
+            </button>
           </nav>
           <button className="lang-switch" onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')} lang={lang === 'ar' ? 'en' : 'ar'}>
             {t.switchLabel}
@@ -82,11 +86,18 @@ export default function App() {
             importNotice={importNotice}
             onDismissNotice={() => setImportNotice(null)}
             onImported={openInBuilder}
+            onOpenInterview={() => setTab('interview')}
           />
         </div>
         <div hidden={tab !== 'check'} className="no-print">
           <Checker jobDescription={jobDescription} setJobDescription={setJobDescription} onOpenInBuilder={openInBuilder} />
         </div>
+        {/* Mounted only while open so the interview starts fresh and no microphone is left listening. */}
+        {tab === 'interview' && (
+          <div className="no-print">
+            <InterviewPage cv={cv} jobDescription={jobDescription} onApplied={openInBuilder} />
+          </div>
+        )}
       </div>
     </I18nContext.Provider>
   );

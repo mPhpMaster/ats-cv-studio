@@ -5,6 +5,7 @@ import { hasContent, parseCVText } from '../lib/cvParser';
 import { cvToText } from '../lib/cvText';
 import { useSpellChecker } from '../lib/spell';
 import type { CVData } from '../types';
+import AiEnhanceDialog from './AiEnhanceDialog';
 import CVPreview from './CVPreview';
 import { FullReport } from './Report';
 
@@ -56,6 +57,7 @@ export default function Checker({ jobDescription, setJobDescription, onOpenInBui
   const [loading, setLoading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const compareInput = useRef<HTMLInputElement>(null);
+  const [aiFix, setAiFix] = useState(false);
 
   const result = useMemo(
     () => (text.trim() || source.fileName
@@ -64,6 +66,11 @@ export default function Checker({ jobDescription, setJobDescription, onOpenInBui
     [text, jobDescription, source, lang, compare, spell],
   );
   const rebuilt = useMemo(() => (text.trim() ? linkedinCV ?? parseCVText(text) : null), [text, linkedinCV]);
+  /** Open findings in the uploaded CV — drives the "Fix issues with AI" button. */
+  const openIssues = useMemo(
+    () => (result ? result.checks.filter((c) => c.severity === 'warn' || c.severity === 'fail').length : 0),
+    [result],
+  );
   const rebuiltScore = useMemo(
     () => (rebuilt && hasContent(rebuilt)
       ? analyzeCV(cvToText(rebuilt), jobDescription, { kind: 'builder' }, { lang, cv: rebuilt, linkedin: compare?.cv, spell }).score
@@ -176,6 +183,28 @@ export default function Checker({ jobDescription, setJobDescription, onOpenInBui
       </div>
 
       {error && <p className="error">{error}</p>}
+
+      {/* Fixing needs the CV as structured data, which only exists once the upload could be parsed. */}
+      {result && rebuilt && hasContent(rebuilt) && openIssues > 0 && (
+        <div className="row-actions no-print">
+          <button className="ai-btn primary" onClick={() => setAiFix(true)}>
+            🛠 {t.checker.fixWithAi} ({openIssues})
+          </button>
+          <span className="muted">{t.checker.fixWithAiNote}</span>
+        </div>
+      )}
+
+      {aiFix && result && rebuilt && (
+        <AiEnhanceDialog
+          cv={rebuilt}
+          jobDescription={jobDescription}
+          result={result}
+          mode="fix"
+          analyze={(next) => analyzeCV(cvToText(next), jobDescription, { kind: 'builder' }, { lang, cv: next, spell })}
+          onClose={() => setAiFix(false)}
+          onApply={(next) => { setAiFix(false); onOpenInBuilder(next, t.ai.fixSource); }}
+        />
+      )}
 
       {result ? (
         <FullReport

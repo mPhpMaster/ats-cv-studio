@@ -23,6 +23,8 @@ interface Props {
   importNotice: string | null;
   onDismissNotice: () => void;
   onImported: (cv: CVData, source: string) => void;
+  /** Switches to the interview page, where the AI asks and the user answers. */
+  onOpenInterview: () => void;
 }
 
 const PRESENT: Record<Lang, string> = { en: 'Present', ar: 'حتى الآن' };
@@ -101,13 +103,15 @@ function BulletHints({ text, repeated, onChange }: { text: string; repeated: Set
   );
 }
 
-export default function Builder({ cv, setCv, jobDescription, setJobDescription, importNotice, onDismissNotice, onImported }: Props) {
+export default function Builder({ cv, setCv, jobDescription, setJobDescription, importNotice, onDismissNotice, onImported, onOpenInterview }: Props) {
   const { t, lang: uiLang } = useI18n();
   const b = t.builder;
   const [busy, setBusy] = useState(false);
   const [showText, setShowText] = useState(false);
   const [importTab, setImportTab] = useState<ImportTab | null>(null);
   const [aiMode, setAiMode] = useState<AiMode | null>(null);
+  /** Set when the CV language is switched, so the app can offer to translate the text that is still in the old one. */
+  const [translateOffer, setTranslateOffer] = useState<Lang | null>(null);
   const jsonInput = useRef<HTMLInputElement>(null);
   const importMenu = useRef<HTMLDetailsElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -180,7 +184,9 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
   const set = <K extends keyof CVData>(k: K, v: CVData[K]) => setCv((c) => ({ ...c, [k]: v }));
   const setDesign = (patch: Partial<Design>) => setCv((c) => ({ ...c, design: { ...getDesign(c), ...patch } }));
 
-  const changeCvLanguage = (next: Lang) =>
+  const changeCvLanguage = (next: Lang) => {
+    // Switching the language only changes headings and layout; the text the user wrote stays in the old one.
+    if (cvLang(cv) !== next) setTranslateOffer(next);
     setCv((c) => {
       const from = PRESENT[cvLang(c)];
       return {
@@ -189,6 +195,7 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
         experience: c.experience.map((e) => (e.endDate === from ? { ...e, endDate: PRESENT[next] } : e)),
       };
     });
+  };
 
   function listOps<T extends { id: string }>(key: 'experience' | 'education' | 'certifications' | 'projects', blank: () => T) {
     const items = cv[key] as unknown as T[];
@@ -304,6 +311,7 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
           <button className="ai-btn" title={gaps.length ? undefined : t.ai.noGaps} onClick={() => setAiMode('interview')}>
             🎤 {b.aiInterview}{gaps.length ? ` (${gaps.length})` : ''}
           </button>
+          <button className="ai-btn" onClick={onOpenInterview}>🗨 {t.interview.tab}</button>
           <button onClick={() => setCv(sampleCV(lang))}>{b.loadSample}</button>
           <button onClick={() => confirm(b.confirmClear) && setCv({ ...emptyCV(lang), design: cv.design })}>{b.newBlank}</button>
           <button title="Ctrl+S" onClick={saveJson}>{b.saveJson}</button>
@@ -323,6 +331,16 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
         <div className="notice no-print">
           <span>{b.importedBanner(importNotice)}</span>
           <button className="link" onClick={onDismissNotice}>{b.dismiss}</button>
+        </div>
+      )}
+
+      {translateOffer && (
+        <div className="notice no-print">
+          <span>{t.ai.translateOffer(translateOffer === 'ar' ? 'العربية' : 'English')}</span>
+          <button className="link" onClick={() => { setTranslateOffer(null); setAiMode('translate'); }}>
+            🌐 {t.ai.translateNow}
+          </button>
+          <button className="link" onClick={() => setTranslateOffer(null)}>{t.ai.dismiss}</button>
         </div>
       )}
 
@@ -496,7 +514,10 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
           analyze={(next) => analyzeCV(cvToText(next), jobDescription, { kind: 'builder' }, { lang: uiLang, cv: next, spell })}
           onClose={() => setAiMode(null)}
           onApply={(next) => {
-            const source = aiMode === 'fix' ? t.ai.fixSource : aiMode === 'interview' ? t.ai.interviewSource : t.ai.source;
+            const source = aiMode === 'fix' ? t.ai.fixSource
+              : aiMode === 'interview' ? t.ai.interviewSource
+                : aiMode === 'translate' ? t.ai.translateSource
+                  : t.ai.source;
             onImported(next, source);
             setAiMode(null);
           }}

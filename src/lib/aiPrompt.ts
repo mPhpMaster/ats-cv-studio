@@ -47,7 +47,7 @@ const OUTPUT_SHAPE = `{
  * "enhance" rewrites the CV for ATS; "fix" only repairs the issues the report found;
  * "interview" has the assistant ask the user, one question at a time, for what is still missing.
  */
-export type AiMode = 'enhance' | 'fix' | 'interview';
+export type AiMode = 'enhance' | 'fix' | 'interview' | 'translate';
 
 interface PromptInput {
   cv: CVData;
@@ -194,6 +194,49 @@ export function buildAiPrompt({ cv, jobDescription, result, uiLang, mode = 'enha
         ...(issues.length ? issues : ['- No issues reported.']),
         '',
         ...(job ? ['TARGET JOB', job, ''] : []),
+        'CV (JSON)',
+        json,
+        '',
+        'OUTPUT',
+        'Reply with ONLY one JSON object (no markdown, no commentary) using exactly this structure:',
+        OUTPUT_SHAPE,
+      ].join('\n');
+  }
+
+  if (mode === 'translate') {
+    const target = uiLang === 'ar' ? (arabicCv ? 'العربية' : 'الإنجليزية') : (arabicCv ? 'Arabic' : 'English');
+    return uiLang === 'ar'
+      ? [
+        'أنت مترجم محترف متخصص في السير الذاتية.',
+        `ترجم السيرة الذاتية أدناه إلى ${target} ترجمة طبيعية يكتبها متحدث أصلي، لا ترجمة حرفية.`,
+        '',
+        'القواعد',
+        '1. لا تترجم ولا تكتب بحروف أخرى: أسماء الأشخاص، وأسماء الشركات وجهات العمل، وأسماء الجامعات، وأسماء الشهادات الرسمية.',
+        '2. أبقِ كما هي تمامًا: البريد الإلكتروني، وأرقام الهواتف، والروابط، وأسماء التقنيات (React، Laravel، MySQL، Docker…)، وكل رقم ونسبة.',
+        '3. أبقِ التواريخ بصيغتها نفسها (شهر/سنة). ترجم كلمة «حتى الآن» أو «Present» إلى ما يقابلها.',
+        '4. ترجم المسميات الوظيفية والملخص ونقاط الإنجازات وتفاصيل التعليم وأوصاف المشاريع وأسماء المهارات العامة.',
+        '5. لا تضف ولا تحذف أي معلومة، وأبقِ العدد نفسه من الوظائف والنقاط بالترتيب نفسه.',
+        '6. في "notes" اذكر أي مصطلح تركته بلغته الأصلية عمدًا.',
+        '',
+        'السيرة الذاتية (JSON)',
+        json,
+        '',
+        'المخرجات',
+        'أجب بكائن JSON واحد فقط (بدون markdown أو أي تعليق) وبنفس المفاتيح الإنجليزية في هذا الهيكل تمامًا:',
+        OUTPUT_SHAPE,
+      ].join('\n')
+      : [
+        'You are a professional translator who specialises in CVs.',
+        `Translate the CV below into ${target} the way a native speaker would write it — not word for word.`,
+        '',
+        'RULES',
+        '1. Never translate or transliterate: people\'s names, employer and company names, university names, or the official names of certifications.',
+        '2. Leave exactly as they are: email addresses, phone numbers, URLs, technology names (React, Laravel, MySQL, Docker…), and every number and percentage.',
+        '3. Keep dates in the same format (MM/YYYY). Translate "Present" to its equivalent.',
+        '4. Do translate: job titles, the summary, achievement bullets, education details, project descriptions and generic skill names.',
+        '5. Add nothing and drop nothing. Keep the same number of roles and bullets, in the same order.',
+        '6. In "notes", list any term you deliberately left in its original language.',
+        '',
         'CV (JSON)',
         json,
         '',

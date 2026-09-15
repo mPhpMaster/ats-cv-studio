@@ -222,13 +222,23 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal ai-modal" role="dialog" aria-modal="true" aria-labelledby="ai-title" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
-          <h2 id="ai-title">{mode === 'fix' ? `🛠 ${a.fixTitle}` : mode === 'interview' ? `🎤 ${a.interviewTitle}` : `✨ ${a.title}`}</h2>
+          <h2 id="ai-title">{
+            mode === 'fix' ? `🛠 ${a.fixTitle}`
+              : mode === 'interview' ? `🎤 ${a.interviewTitle}`
+                : mode === 'translate' ? `🌐 ${a.translateTitle}`
+                  : `✨ ${a.title}`
+          }</h2>
           <button className="icon-btn" onClick={onClose} aria-label={a.cancel}>✕</button>
         </header>
 
         {!preview ? (
           <div className="modal-body">
-            <p>{mode === 'fix' ? a.fixIntro : mode === 'interview' ? a.interviewIntro : a.intro}</p>
+            <p>{
+              mode === 'fix' ? a.fixIntro
+                : mode === 'interview' ? a.interviewIntro
+                  : mode === 'translate' ? a.translateIntro
+                    : a.intro
+            }</p>
 
             {mode === 'fix' ? (
               <section className="ai-change">
@@ -244,7 +254,7 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
                   ? <ul dir="auto">{gaps.map((line, i) => <li key={i}>{line.replace(/^- /, '')}</li>)}</ul>
                   : <p className="muted">{a.noGaps}</p>}
               </section>
-            ) : (
+            ) : mode === 'enhance' ? (
               <>
                 <label className="check-row">
                   <input type="checkbox" checked={tailor && hasJob} disabled={!hasJob} onChange={(e) => setTailor(e.target.checked)} />
@@ -252,7 +262,7 @@ export default function AiEnhanceDialog({ cv, jobDescription, result, analyze, m
                 </label>
                 {!hasJob && <p className="muted small-note">{a.tailorNeedsJob}</p>}
               </>
-            )}
+            ) : null}
 
             {mode === 'interview' && canChat && aiReady && (
               <section className="import-option">
