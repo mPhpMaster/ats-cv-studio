@@ -27,7 +27,9 @@ function createWindow() {
     minHeight: 640,
     title: `ATS CV Studio ${app.getVersion()}`,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
-    backgroundColor: '#f4f5fa',
+    // White on purpose: Electron paints this colour as a full-page rectangle into printToPDF output,
+    // so any tint here ends up as the background of every exported CV.
+    backgroundColor: '#ffffff',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
