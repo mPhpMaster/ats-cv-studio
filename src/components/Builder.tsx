@@ -10,7 +10,7 @@ import { downloadBlob, savePdf } from '../lib/download';
 import { emptyCV, sampleCV, uid } from '../lib/sample';
 import { hasContent } from '../lib/cvParser';
 import { useSpellChecker } from '../lib/spell';
-import type { Certification, CheckFix, CVData, Design, Education, Experience, Lang, Personal, Project } from '../types';
+import type { Certification, CheckFix, CVData, Design, Education, Experience, ExtraSection, Lang, Personal, Project } from '../types';
 import AiEnhanceDialog from './AiEnhanceDialog';
 import CVPreview from './CVPreview';
 import ImportDialog, { type ImportTab } from './ImportDialog';
@@ -206,8 +206,9 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
     });
   };
 
-  function listOps<T extends { id: string }>(key: 'experience' | 'education' | 'certifications' | 'projects', blank: () => T) {
-    const items = cv[key] as unknown as T[];
+  function listOps<T extends { id: string }>(key: 'experience' | 'education' | 'certifications' | 'projects' | 'extras', blank: () => T) {
+    // `extras` is absent from CVs saved before it existed.
+    const items = (cv[key] ?? []) as unknown as T[];
     const save = (next: T[]) => set(key, next as never);
     return {
       items,
@@ -229,6 +230,7 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
   const edu = listOps<Education>('education', () => ({ id: uid(), degree: '', school: '', location: '', startDate: '', endDate: '', details: '' }));
   const certs = listOps<Certification>('certifications', () => ({ id: uid(), name: '', issuer: '', date: '' }));
   const projects = listOps<Project>('projects', () => ({ id: uid(), name: '', link: '', description: '' }));
+  const extras = listOps<ExtraSection>('extras', () => ({ id: uid(), title: '', items: '' }));
 
   const baseName = `${(cv.personal.fullName || 'CV').trim().replace(/\s+/g, '_')}_CV`;
   const dateError = (v: string, allowYear = false) =>
@@ -293,6 +295,7 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
           education: Array.isArray(data.education) ? data.education : blank.education,
           certifications: Array.isArray(data.certifications) ? data.certifications : blank.certifications,
           projects: Array.isArray(data.projects) ? data.projects : blank.projects,
+          extras: Array.isArray(data.extras) ? data.extras : [],
         }, file.name);
       } catch {
         alert(b.invalidJson);
@@ -509,6 +512,21 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
               </fieldset>
             ))}
             <button type="button" className="add" onClick={projects.add}>{b.addProject}</button>
+          </Panel>
+
+          {/* Anything the fixed sections do not cover — awards, volunteering, publications, memberships. */}
+          <Panel title={b.extras} count={extras.items.length} defaultOpen={false}>
+            <p className="muted small-note">{b.extrasHint}</p>
+            {extras.items.map((x) => (
+              <fieldset key={x.id} className="item">
+                <ItemTools id={x.id} remove={extras.remove} move={extras.move} />
+                <Field label={b.extraTitle} value={x.title} placeholder={b.extraTitlePh}
+                  onChange={(v) => extras.update(x.id, { title: v })} />
+                <Area label={b.extraItems} rows={3} value={x.items} placeholder={b.extraItemsPh}
+                  onChange={(v) => extras.update(x.id, { items: v })} />
+              </fieldset>
+            ))}
+            <button type="button" className="add" onClick={extras.add}>{b.addExtra}</button>
           </Panel>
 
           <Panel title={b.languages} defaultOpen={false}>

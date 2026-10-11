@@ -54,6 +54,17 @@ export interface Project {
   description: string;
 }
 
+/**
+ * A section the fixed ones do not cover: awards, volunteering, publications, memberships, patents… One free
+ * title and one item per line, which is all those sections ever are, and keeps the user from being limited to
+ * whatever list this app happened to anticipate.
+ */
+export interface ExtraSection {
+  id: string;
+  title: string;
+  items: string; // one per line
+}
+
 export interface CVData {
   language?: Lang;
   design?: Design;
@@ -65,6 +76,8 @@ export interface CVData {
   certifications: Certification[];
   projects: Project[];
   languages: string; // comma separated
+  /** Optional: CVs saved before this existed have none. */
+  extras?: ExtraSection[];
 }
 
 export type Severity = 'pass' | 'warn' | 'fail' | 'na';

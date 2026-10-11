@@ -1,7 +1,7 @@
 {
   "name": "ats-cv-studio",
   "productName": "ATS CV Studio",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Build ATS-friendly CVs and check any CV for ATS compatibility (English & Arabic).",
   "author": "ATS CV Studio",
   "license": "MIT",
@@ -14,7 +14,8 @@
     "preview": "vite preview",
     "electron:dev": "node scripts/dev-electron.mjs",
     "electron:start": "vite build && electron .",
-    "dist": "npm run build && electron-builder --win nsis --x64 --publish never"
+    "dist": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "test": "node tests/run.mjs"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

@@ -1,7 +1,7 @@
 import { useDeferredValue, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useI18n } from '../i18n';
 import { analyzeCV, type SourceInfo } from '../lib/analyzer';
-import { droppedSections, hasContent, parseCVText } from '../lib/cvParser';
+import { hasContent, parseCVText } from '../lib/cvParser';
 import { cvToText } from '../lib/cvText';
 import { buildJobDescriptionPrompt, JOB_PRESETS } from '../lib/jobPresets';
 import { useSpellChecker } from '../lib/spell';
@@ -313,11 +313,7 @@ export default function Checker({ jobDescription, setJobDescription, onOpenInBui
               rebuilt={rebuilt}
               before={result.score}
               after={rebuiltScore}
-              onOpen={() => {
-                const dropped = droppedSections(reportText);
-                const left = dropped.length ? ` — ${t.importer.notImported(dropped.map((s) => t.importer.sectionNames[s]).join(lang === 'ar' ? '، ' : ', '))}` : '';
-                onOpenInBuilder(rebuilt, `${source.fileName ?? t.report.original}${left}`);
-              }}
+              onOpen={() => onOpenInBuilder(rebuilt, source.fileName ?? t.report.original)}
             />
           ) : undefined}
         />

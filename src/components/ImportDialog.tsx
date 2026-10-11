@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { useI18n } from '../i18n';
-import { droppedSections, hasContent, parseCVText } from '../lib/cvParser';
+import { hasContent, parseCVText } from '../lib/cvParser';
 import type { CVData } from '../types';
 
 export type ImportTab = 'file' | 'linkedin';
@@ -62,10 +62,7 @@ export default function ImportDialog({ tab, onTab, onClose, onImported }: Props)
       const { parseFile } = await import('../lib/parseFile');
       const parsed = await parseFile(file);
       if (parsed.linkedin) return finish(parsed.linkedin, `LinkedIn (${file.name})`);
-      // Awards, volunteering and publications have no place in the CV yet; say so rather than drop them silently.
-      const dropped = droppedSections(parsed.text);
-      const left = dropped.length ? ` — ${t.importer.notImported(dropped.map((s) => t.importer.sectionNames[s]).join(lang === 'ar' ? '، ' : ', '))}` : '';
-      finish(parseCVText(parsed.text), `${expectLinkedIn ? `${file.name} — ${t.importer.notLinkedIn}` : file.name}${left}`);
+      finish(parseCVText(parsed.text), expectLinkedIn ? `${file.name} — ${t.importer.notLinkedIn}` : file.name);
     });
 
   const importLinkedInExport = (files: File[]) =>

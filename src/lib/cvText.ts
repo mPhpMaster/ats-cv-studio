@@ -80,6 +80,11 @@ export function cvToText(cv: CVData): string {
     ...splitLines(pr.description).map((b) => `• ${b}`),
   ].filter(Boolean)));
 
+  // The user's own sections (awards, volunteering…), each under the heading they chose.
+  for (const extra of cv.extras ?? []) {
+    if (extra.title.trim()) section(extra.title.trim(), splitLines(extra.items).map((i) => `• ${i}`));
+  }
+
   const langs = splitList(cv.languages);
   section(h.languages, langs.length ? [langs.join(h.listSep)] : []);
 

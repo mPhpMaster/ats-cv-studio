@@ -95,7 +95,21 @@ src/
 Contributions are welcome — issues and pull requests both. Two things worth knowing before you start:
 
 - `src/i18n/ar.ts` is typed against `src/i18n/en.ts`, so the two must stay key-for-key identical or the build fails.
-- Run `npx tsc -b` before opening a pull request.
+- Run `npx tsc -b` and `npm test` before opening a pull request.
+
+### Tests
+
+```
+npm test            # every suite
+npm test parser     # only suites whose name contains "parser"
+```
+
+Plain Node, no test framework: `tests/run.mjs` runs each `tests/*.test.mjs` in its own process and prints one
+summary. Main-process code (`electron/`) is required directly; the app's own TypeScript is loaded through Vite,
+so there is no second toolchain to keep in step.
+
+Every suite runs offline against a local mock server. No test reads or writes your real AI settings file, and
+none of them needs an API key.
 
 ## Support
 

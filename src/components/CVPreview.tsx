@@ -108,6 +108,16 @@ export default function CVPreview({ cv }: { cv: CVData }) {
         </section>
       )}
 
+      {(cv.extras ?? []).map((extra) => {
+        const items = splitLines(extra.items);
+        return extra.title.trim() && items.length ? (
+          <section key={extra.id}>
+            <h2>{extra.title}</h2>
+            <ul>{items.map((item, i) => <li key={i}>{item}</li>)}</ul>
+          </section>
+        ) : null;
+      })}
+
       {langs.length > 0 && (
         <section>
           <h2>{h.languages}</h2>

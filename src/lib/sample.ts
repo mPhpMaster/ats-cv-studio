@@ -14,6 +14,7 @@ export const emptyCV = (lang: Lang = 'en'): CVData => ({
   certifications: [],
   projects: [],
   languages: '',
+  extras: [],
 });
 
 // The samples are written to pass every check without a job description (100/100): 450+ words, 3–6 bullets per role,

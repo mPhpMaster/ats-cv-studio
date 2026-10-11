@@ -6,6 +6,16 @@ import { BULLET_RE, EMAIL_RE, LINKEDIN_RE, findPhone, findUrls, findWebsite, has
 import { emptyCV, uid } from './sample';
 import { splitSections } from './sections';
 
+/**
+ * Sections the CV has no dedicated field for. Their headings are already recognised, so without this their
+ * lines were read and then thrown away; they become extra sections under the heading shown here.
+ */
+const EXTRA_TITLES: Record<'awards' | 'volunteer' | 'publications', Record<Lang, string>> = {
+  awards: { en: 'Awards', ar: 'الجوائز' },
+  volunteer: { en: 'Volunteering', ar: 'العمل التطوعي' },
+  publications: { en: 'Publications', ar: 'المنشورات' },
+};
+
 export const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length;
 export const clean = (s: string) => s.replace(/^[\s|,،;:–—·-]+|[\s|,،;:–—·-]+$/g, '').trim();
 const YEAR_RE = /(?<!\d)(?:19|20)\d{2}(?!\d)/;
@@ -302,18 +312,12 @@ export function parseCVText(raw: string): CVData {
   cv.languages = listItems(sections.get('languages') ?? []).join(sep);
   cv.certifications = toCerts(sections.get('certifications') ?? []);
   cv.projects = toProjects(sections.get('projects') ?? []);
+  // Sections with no field of their own are kept as the user's own extra sections rather than dropped.
+  cv.extras = (Object.keys(EXTRA_TITLES) as (keyof typeof EXTRA_TITLES)[]).flatMap((key) => {
+    const items = (sections.get(key) ?? []).map(stripBullet).map((l) => l.trim()).filter(Boolean);
+    return items.length ? [{ id: uid(), title: EXTRA_TITLES[key][lang], items: items.join('\n') }] : [];
+  });
   return cv;
-}
-
-/** Sections the CV has no field for; their headings are recognised, so their lines would otherwise vanish unseen. */
-const UNMAPPED_SECTIONS = ['awards', 'volunteer', 'publications'] as const;
-export type UnmappedSection = (typeof UNMAPPED_SECTIONS)[number];
-
-/** Which of those sections a CV text contains with actual content, so an import can say what it left behind. */
-export function droppedSections(raw: string): UnmappedSection[] {
-  const lines = lightNormalize(raw.replace(/\r/g, '')).split('\n').map((l) => l.trim()).filter(Boolean);
-  const { sections } = splitSections(lines);
-  return UNMAPPED_SECTIONS.filter((s) => (sections.get(s) ?? []).some((l) => l.trim()));
 }
 
 export function hasContent(cv: CVData): boolean {

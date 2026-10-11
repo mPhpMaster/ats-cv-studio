@@ -103,6 +103,13 @@ export async function exportDocx(cv: CVData): Promise<Blob> {
     });
   }
 
+  for (const extra of cv.extras ?? []) {
+    const items = splitLines(extra.items);
+    if (!extra.title.trim() || !items.length) continue;
+    children.push(heading(extra.title.trim()));
+    items.forEach((item) => children.push(bullet(item)));
+  }
+
   const langs = splitList(cv.languages);
   if (langs.length) children.push(heading(h.languages), para(runs(langs.join(h.listSep))));
 
