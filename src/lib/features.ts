@@ -12,9 +12,14 @@ export interface Features {
   voice: boolean;
   /** The "Additional sections" panel in the builder. Imported sections are kept either way. */
   extras: boolean;
+  /**
+   * Transcribe voice answers on this computer instead of sending them to a provider. Off until asked for:
+   * turning it on downloads a model of about 45 MB, which is nobody's business to do uninvited.
+   */
+  localStt: boolean;
 }
 
-export const DEFAULT_FEATURES: Features = { donate: true, voice: true, extras: true };
+export const DEFAULT_FEATURES: Features = { donate: true, voice: true, extras: true, localStt: false };
 
 const KEY = 'ats.features';
 

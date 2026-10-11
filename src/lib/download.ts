@@ -19,7 +19,22 @@ interface DesktopBridge {
   aiTranscribe?(audio: string, mimeType: string, language: string): Promise<AiCompletion>;
   /** Asks the provider which models it currently accepts, so a retired name is never offered. */
   aiModels?(kind?: 'chat' | 'stt'): Promise<AiModelList>;
+  /** The offline speech model: what is downloaded, downloading it, and removing it again. */
+  sttStatus?(): Promise<SttStatus>;
+  sttInstall?(): Promise<SttInstall>;
+  sttRemove?(): Promise<SttStatus>;
+  onSttProgress?(callback: (update: { done: number; total: number; bytes: number; file: string }) => void): () => void;
 }
+
+export interface SttStatus {
+  modelId: string;
+  installed: boolean;
+  missing: number;
+  files: number;
+  bytes: number;
+}
+
+export type SttInstall = (SttStatus & { ok: true }) | { ok: false; error: string; message?: string };
 
 export type AiProvider = 'anthropic' | 'openai' | 'google' | 'deepseek' | 'custom';
 

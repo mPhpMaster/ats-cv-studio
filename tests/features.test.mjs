@@ -21,9 +21,9 @@ try {
     store = {};
     const f = loadFeatures();
     ok('nothing stored gives the defaults', JSON.stringify(f) === JSON.stringify(DEFAULT_FEATURES), f);
-    ok('everything ships switched on', Object.values(DEFAULT_FEATURES).every((v) => v === true), DEFAULT_FEATURES);
-    ok('the donation link, voice and extra sections can all be switched off',
-      ['donate', 'voice', 'extras'].every((k) => k in DEFAULT_FEATURES), Object.keys(DEFAULT_FEATURES));
+    ok('what already existed ships switched on', ['donate', 'voice', 'extras'].every((k) => DEFAULT_FEATURES[k] === true), DEFAULT_FEATURES);
+    // Turning it on downloads a model, so it must never start on.
+    ok('offline speech to text ships switched OFF', DEFAULT_FEATURES.localStt === false, DEFAULT_FEATURES);
   }
 
   group('a choice is remembered');

@@ -12,6 +12,14 @@ contextBridge.exposeInMainWorld('desktop', {
   aiChat: (messages) => ipcRenderer.invoke('ai-chat', { messages }),
   aiTranscribe: (audio, mimeType, language) => ipcRenderer.invoke('ai-transcribe', { audio, mimeType, language }),
   aiModels: (kind) => ipcRenderer.invoke('ai-models', { kind }),
+  sttStatus: () => ipcRenderer.invoke('stt-status'),
+  sttInstall: () => ipcRenderer.invoke('stt-install'),
+  sttRemove: () => ipcRenderer.invoke('stt-remove'),
+  onSttProgress: (callback) => {
+    const handler = (_event, update) => callback(update);
+    ipcRenderer.on('stt-progress', handler);
+    return () => ipcRenderer.removeListener('stt-progress', handler);
+  },
   onLinkedinProgress: (callback) => {
     const handler = (_event, update) => callback(update);
     ipcRenderer.on('linkedin-progress', handler);

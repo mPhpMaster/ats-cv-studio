@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n';
-import { isDesktop, type AiProvider, type AiSettings, type AiSettingsPatch, type AiVoiceProvider } from '../lib/download';
+import { isDesktop, type AiProvider, type AiSettings, type AiSettingsPatch, type AiVoiceProvider, type SttStatus } from '../lib/download';
 import { useFeatures } from '../lib/features';
 
 const PROVIDERS: { id: AiProvider; label: string }[] = [
@@ -70,12 +70,19 @@ export default function AiSettingsDialog({ onClose }: Props) {
   const [fetchedModels, setFetchedModels] = useState<string[] | null>(null);
   const [modelsNote, setModelsNote] = useState('');
   const [loadingModels, setLoadingModels] = useState(false);
+  const [stt, setStt] = useState<SttStatus | null>(null);
+  const [sttBusy, setSttBusy] = useState(false);
+  const [sttProgress, setSttProgress] = useState({ done: 0, total: 0 });
+  const [sttNote, setSttNote] = useState('');
   const [voiceModels, setVoiceModels] = useState<string[]>([]);
   const [voiceModelsNote, setVoiceModelsNote] = useState('');
   const [loadingVoiceModels, setLoadingVoiceModels] = useState(false);
 
   useEffect(() => {
     window.desktop?.aiSettingsGet?.().then(setSettings).catch(() => setSettings(null));
+    window.desktop?.sttStatus?.().then(setStt).catch(() => setStt(null));
+    // The download reports one file at a time, so a slow connection still shows movement.
+    return window.desktop?.onSttProgress?.((update) => setSttProgress({ done: update.done, total: update.total }));
   }, []);
 
   /**
@@ -129,6 +136,32 @@ export default function AiSettingsDialog({ onClose }: Props) {
       setModelsNote(a.aiErrors.http);
     } finally {
       setLoadingModels(false);
+    }
+  }
+
+  async function installStt() {
+    if (typeof window.desktop?.sttInstall !== 'function') return;
+    setSttBusy(true);
+    setSttNote('');
+    setSttProgress({ done: 0, total: 0 });
+    try {
+      const res = await window.desktop.sttInstall();
+      if (res.ok) setStt(res);
+      else setSttNote(f.localSttFailed);
+    } catch {
+      setSttNote(f.localSttFailed);
+    } finally {
+      setSttBusy(false);
+    }
+  }
+
+  async function removeStt() {
+    if (typeof window.desktop?.sttRemove !== 'function') return;
+    setSttBusy(true);
+    try {
+      setStt(await window.desktop.sttRemove());
+    } finally {
+      setSttBusy(false);
     }
   }
 
@@ -188,6 +221,34 @@ export default function AiSettingsDialog({ onClose }: Props) {
                 <span>{label}</span>
               </label>
             ))}
+            {/* Desktop only: the model is stored in the app's data folder, which the web build has none of. */}
+            {desktop && (
+              <>
+                <label className="check">
+                  <input type="checkbox" checked={features.localStt} onChange={(e) => setFeature('localStt', e.target.checked)} />
+                  <span>{f.localStt}</span>
+                </label>
+                <p className="muted small-note">{f.localSttHint}</p>
+                {features.localStt && (
+                  <>
+                    <p className={stt?.installed ? 'muted small-note' : 'hint'}>
+                      {sttBusy ? f.localSttWorking(sttProgress.done, sttProgress.total)
+                        : stt?.installed ? f.localSttReady((stt.bytes / 1e6).toFixed(0))
+                          : f.localSttMissing}
+                    </p>
+                    <div className="row-actions">
+                      {!stt?.installed && (
+                        <button type="button" onClick={installStt} disabled={sttBusy}>⬇ {f.localSttInstall}</button>
+                      )}
+                      {stt?.installed && (
+                        <button type="button" onClick={removeStt} disabled={sttBusy}>{f.localSttRemove}</button>
+                      )}
+                    </div>
+                    {sttNote && <p className="muted small-note">{sttNote}</p>}
+                  </>
+                )}
+              </>
+            )}
           </section>
 
           {!desktop && <p className="muted small-note">{a.desktopOnly}</p>}

@@ -111,6 +111,19 @@ so there is no second toolchain to keep in step.
 Every suite runs offline against a local mock server. No test reads or writes your real AI settings file, and
 none of them needs an API key.
 
+## Offline speech to text (optional)
+
+Voice answers normally go to the AI provider you configured. Instead, you can transcribe them on your own
+computer: turn on **Transcribe voice answers on this computer** in ⚙ settings and download the model once
+(Whisper tiny, quantized, about 45 MB, fetched from Hugging Face into the app's data folder). After that the
+recording never leaves the machine, and no key or connection is needed for it.
+
+It is off until you ask for it, nothing is downloaded before you press the button, and the model can be deleted
+again from the same place. Accuracy is below a hosted provider's, and transcription is slower.
+
+The speech runtime itself ships with the app; the renderer reads the downloaded model through an `ats-model://`
+scheme that serves that one folder and refuses anything outside it.
+
 ## Support
 
 ATS CV Studio is free and open source, and stays that way. If it helped you land an interview and you would like to

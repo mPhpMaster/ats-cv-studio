@@ -1,9 +1,11 @@
 // Electron main process for the ATS CV Studio desktop app.
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { importLinkedInProfile } = require('./linkedin.cjs');
 const { callAi, transcribeAudio, listModels, readSettings, writeSettings, publicSettings, voiceConfig } = require('./aiClient.cjs');
+const localStt = require('./localStt.cjs');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const FILTERS = {
@@ -19,6 +21,12 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
   return;
 }
+
+// The offline speech model is read by the renderer through this scheme, which serves one folder and nothing
+// else. It must be declared before the app is ready, and is treated as a normal secure origin so fetch works.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'ats-model', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, bypassCSP: false } },
+]);
 
 let mainWindow = null;
 
@@ -136,6 +144,16 @@ ipcMain.handle('ai-models', async (_event, { kind } = {}) => {
   return listModels({ ...creds, kind: kind === 'stt' ? 'stt' : 'chat' });
 });
 
+// ------------------------------------------------- Offline speech to text (downloaded once, on request only)
+ipcMain.handle('stt-status', () => localStt.modelStatus(app.getPath('userData')));
+
+ipcMain.handle('stt-install', async (event) => {
+  const progress = (update) => { if (!event.sender.isDestroyed()) event.sender.send('stt-progress', update); };
+  return localStt.installModel(app.getPath('userData'), progress);
+});
+
+ipcMain.handle('stt-remove', () => localStt.removeModel(app.getPath('userData')));
+
 // Multi-turn version: the whole conversation is sent each time, so the assistant remembers its own questions.
 ipcMain.handle('ai-chat', async (_event, { messages }) => {
   const settings = readSettings(app.getPath('userData'));
@@ -151,6 +169,19 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   app.setAppUserModelId('com.atscvstudio.app');
+  protocol.handle('ats-model', async (request) => {
+    const file = localStt.resolveModelFile(app.getPath('userData'), request.url);
+    if (!file) return new Response('forbidden', { status: 403 });
+    try {
+      const res = await net.fetch(pathToFileURL(file).toString());
+      // The page itself is served from file://, so without this the reply is a cross-origin one and is blocked.
+      const headers = new Headers(res.headers);
+      headers.set('access-control-allow-origin', '*');
+      return new Response(res.body, { status: res.status, headers });
+    } catch {
+      return new Response('not found', { status: 404 });
+    }
+  });
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

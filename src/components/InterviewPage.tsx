@@ -231,10 +231,32 @@ export default function InterviewPage({ cv, jobDescription, onApplied, active = 
     if (!active && recorder.current?.state === 'recording') stopListening();
   }, [active]);
 
-  /** Sends the finished recording to the provider and drops the transcription into the answer box. */
+  /** Turns the finished recording into text and drops it into the answer box. */
   async function transcribe(blob: Blob) {
     setMicDetail('');
     if (!blob.size) { setMicNote(v.micNothing); return; }
+    // Asked for it: the recording is transcribed here instead of being sent anywhere at all.
+    if (features.localStt) {
+      // Switched on but never downloaded: say so plainly instead of failing deep inside the model loader.
+      const status = await window.desktop?.sttStatus?.().catch(() => null);
+      if (status && !status.installed) { setMicNote(t.features.localSttMissing); return; }
+      setMicNote(t.features.localSttTranscribing);
+      setTranscribing(true);
+      try {
+        const { transcribeLocally } = await import('../lib/localStt');
+        const local = await transcribeLocally(blob, lang === 'ar' ? 'ar' : 'en');
+        setMicNote(local.ok ? '' : local.error === 'empty' ? v.micNothing : v.micFailed);
+        if (local.ok) {
+          setAnswer((current) => (current.trim() ? `${current.trim()} ${local.text}` : local.text));
+          boxRef.current?.focus();
+        } else {
+          setMicDetail(local.message ?? '');
+        }
+      } finally {
+        setTranscribing(false);
+      }
+      return;
+    }
     if (typeof window.desktop?.aiTranscribe !== 'function') { setMicNote(v.micUnsupported); return; }
     setTranscribing(true);
     try {

@@ -452,6 +452,15 @@ export const en = {
     donate: 'Donation link at the bottom of the window',
     voice: 'Voice answers in the interview (microphone button)',
     extras: 'Additional sections in the builder',
+    localStt: 'Transcribe voice answers on this computer',
+    localSttHint: 'No key and no provider: the recording never leaves your computer. Turning this on downloads a speech model (about 45 MB) once; after that it works offline. It is less accurate than a provider, and slower, especially in Arabic.',
+    localSttInstall: 'Download the model',
+    localSttRemove: 'Delete the model',
+    localSttReady: (mb: string) => `Ready — the model is on this computer (${mb} MB).`,
+    localSttMissing: 'The model is not downloaded yet.',
+    localSttWorking: (done: number, total: number) => `Downloading… ${done} of ${total} files`,
+    localSttFailed: 'The download did not finish. Check your connection and try again.',
+    localSttTranscribing: 'Transcribing on this computer…',
   },
 
   cv: {
