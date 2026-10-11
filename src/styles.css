@@ -390,6 +390,20 @@ button.chip:hover { border-color: var(--fail); color: var(--fail); }
 .keywords p { margin: 4px 0; font-size: 13px; }
 
 /* ---------- Checker inputs ---------- */
+/* Feature switches: a checkbox and its label on one line, reading in either direction. */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 4px;
+  cursor: pointer;
+}
+.check input {
+  inline-size: 16px;
+  block-size: 16px;
+  margin: 0;
+}
+
 /* The file picker inside a drop zone: invisible but still in the tab order, so Tab then Enter opens it.
    The [hidden] attribute it used to have removed it from keyboard reach entirely. */
 .file-input {

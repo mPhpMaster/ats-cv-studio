@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n';
-import type { AiProvider, AiSettings, AiSettingsPatch, AiVoiceProvider } from '../lib/download';
+import { isDesktop, type AiProvider, type AiSettings, type AiSettingsPatch, type AiVoiceProvider } from '../lib/download';
+import { useFeatures } from '../lib/features';
 
 const PROVIDERS: { id: AiProvider; label: string }[] = [
   { id: 'anthropic', label: 'Anthropic (Claude)' },
@@ -54,7 +55,11 @@ interface Props {
  */
 export default function AiSettingsDialog({ onClose }: Props) {
   const { t } = useI18n();
+  const { features, setFeature } = useFeatures();
   const a = t.ai;
+  const f = t.features;
+  /** The AI connection lives in a file on this computer, so those sections only exist in the desktop app. */
+  const desktop = isDesktop();
   const [settings, setSettings] = useState<AiSettings | null>(null);
   const [keyInput, setKeyInput] = useState('');
   /** Kept apart from the chat key: the two can belong to different providers. */
@@ -65,6 +70,9 @@ export default function AiSettingsDialog({ onClose }: Props) {
   const [fetchedModels, setFetchedModels] = useState<string[] | null>(null);
   const [modelsNote, setModelsNote] = useState('');
   const [loadingModels, setLoadingModels] = useState(false);
+  const [voiceModels, setVoiceModels] = useState<string[]>([]);
+  const [voiceModelsNote, setVoiceModelsNote] = useState('');
+  const [loadingVoiceModels, setLoadingVoiceModels] = useState(false);
 
   useEffect(() => {
     window.desktop?.aiSettingsGet?.().then(setSettings).catch(() => setSettings(null));
@@ -76,7 +84,7 @@ export default function AiSettingsDialog({ onClose }: Props) {
    * close. Keys are not: a key is saved only with its own Save button.
    */
   const pending = useRef<Partial<AiSettingsPatch>>({});
-  const typed = (field: 'model' | 'baseUrl' | 'voiceBaseUrl', value: string) => { pending.current[field] = value; };
+  const typed = (field: 'model' | 'baseUrl' | 'voiceBaseUrl' | 'voiceModel', value: string) => { pending.current[field] = value; };
   const close = async () => {
     const patch = pending.current;
     pending.current = {};
@@ -124,6 +132,26 @@ export default function AiSettingsDialog({ onClose }: Props) {
     }
   }
 
+  /** The same question for the voice provider, which has its own credentials and its own kind of model. */
+  async function loadVoiceModels() {
+    if (typeof window.desktop?.aiModels !== 'function') return;
+    setLoadingVoiceModels(true);
+    setVoiceModelsNote('');
+    try {
+      const res = await window.desktop.aiModels('stt');
+      if (res.ok) {
+        setVoiceModels(res.models);
+        setVoiceModelsNote(a.modelsFound(res.models.length));
+      } else {
+        setVoiceModelsNote((a.aiErrors as Record<string, string>)[res.error] ?? a.aiErrors.http);
+      }
+    } catch {
+      setVoiceModelsNote(a.aiErrors.http);
+    } finally {
+      setLoadingVoiceModels(false);
+    }
+  }
+
   async function save(patch: Partial<AiSettingsPatch>) {
     // Switching provider resets the model in the main process, so drop back to its picker too — and a list
     // fetched from the old provider must not be offered for the new one.
@@ -149,6 +177,23 @@ export default function AiSettingsDialog({ onClose }: Props) {
         </header>
 
         <div className="modal-body">
+          {/* Nothing added on top of the CV is compulsory. These switches work in the web build too, which is
+              why this section is outside the desktop-only AI settings below. */}
+          <section className="import-option">
+            <h3>{f.title}</h3>
+            <p className="muted small-note">{f.intro}</p>
+            {([['donate', f.donate], ['voice', f.voice], ['extras', f.extras]] as const).map(([key, label]) => (
+              <label key={key} className="check">
+                <input type="checkbox" checked={features[key]} onChange={(e) => setFeature(key, e.target.checked)} />
+                <span>{label}</span>
+              </label>
+            ))}
+          </section>
+
+          {!desktop && <p className="muted small-note">{a.desktopOnly}</p>}
+
+          {desktop && (
+          <>
           <section className="import-option">
             <h3>{a.connection}</h3>
             <label className="field">
@@ -242,6 +287,27 @@ export default function AiSettingsDialog({ onClose }: Props) {
                 </div>
               </>
             )}
+            {voiceProvider && (
+              <>
+                <label className="field">
+                  <span>{a.voiceModelLabel}</span>
+                  {/* Free text with suggestions: transcription model names change as often as chat ones. */}
+                  <input key={`voice-model-${voiceProvider}`} type="text" dir="ltr" list="voice-models"
+                    defaultValue={settings?.voiceModel ?? ''} placeholder={settings?.defaultVoiceModel}
+                    onChange={(e) => typed('voiceModel', e.target.value)}
+                    onBlur={(e) => { delete pending.current.voiceModel; save({ voiceModel: e.target.value }); }} />
+                  <datalist id="voice-models">
+                    {voiceModels.map((m) => <option key={m} value={m} />)}
+                  </datalist>
+                </label>
+                <div className="row-actions">
+                  <button type="button" onClick={loadVoiceModels} disabled={loadingVoiceModels}>
+                    {loadingVoiceModels ? a.modelsLoading : `↻ ${a.refreshModels}`}
+                  </button>
+                  {voiceModelsNote && <span className="muted small-note">{voiceModelsNote}</span>}
+                </div>
+              </>
+            )}
             {voiceProvider === 'custom' && (
               <label className="field">
                 <span>{a.endpoint}</span>
@@ -257,6 +323,8 @@ export default function AiSettingsDialog({ onClose }: Props) {
           </section>
 
           <p className="muted small-note">{a.keyPrivacy}</p>
+          </>
+          )}
           <div className="row-actions">
             <button className="primary" onClick={() => void close()}>{a.close}</button>
           </div>

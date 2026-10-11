@@ -4,6 +4,7 @@ import { analyzeCV } from '../lib/analyzer';
 import { applyAiResponse, buildAiPrompt } from '../lib/aiPrompt';
 import { cvToText } from '../lib/cvText';
 import type { AiMessage } from '../lib/download';
+import { openSettings, useFeatures } from '../lib/features';
 import { useSpellChecker } from '../lib/spell';
 import type { CVData } from '../types';
 
@@ -67,6 +68,7 @@ function parseProgress(question: string): { done: number; total: number } | null
  */
 export default function InterviewPage({ cv, jobDescription, onApplied, active = true }: Props) {
   const { t, lang } = useI18n();
+  const { features } = useFeatures();
   const v = t.interview;
   const spell = useSpellChecker();
 
@@ -380,6 +382,12 @@ export default function InterviewPage({ cv, jobDescription, onApplied, active = 
             {listening && <p className="hint"><span className="rec-dot" />{v.micRecording}</p>}
             {transcribing && <p className="hint">{v.micTranscribing}</p>}
             {micNote && <p className="muted small-note">{micNote}</p>}
+            {/* Most microphone failures are settings problems, so the settings are one click away from the note. */}
+            {micNote && (
+              <p className="small-note">
+                <button type="button" className="link" onClick={openSettings}>⚙ {t.ai.openSettings}</button>
+              </p>
+            )}
             {micDetail && (
               <p className="muted small-note" dir="ltr" style={{ userSelect: 'text' }}>{t.ai.providerSaid} {micDetail}</p>
             )}
@@ -388,10 +396,12 @@ export default function InterviewPage({ cv, jobDescription, onApplied, active = 
               <button className="primary" disabled={!answer.trim() || transcribing} onClick={() => send(answer)}>
                 {v.send}
               </button>
-              <button className={listening ? 'recording' : ''} disabled={transcribing}
-                onClick={() => (listening ? stopListening() : startListening())}>
-                {listening ? `⏹ ${v.micStop}` : `🎙 ${v.mic}`}
-              </button>
+              {features.voice && (
+                <button className={listening ? 'recording' : ''} disabled={transcribing}
+                  onClick={() => (listening ? stopListening() : startListening())}>
+                  {listening ? `⏹ ${v.micStop}` : `🎙 ${v.mic}`}
+                </button>
+              )}
               {/* Sent in the interview's own language: the Arabic prompt tells the model to expect «تخطي»,
                   and the word lands in the visible transcript as the user's own answer. */}
               <button onClick={() => send(lang === 'ar' ? 'تخطي' : 'skip')} disabled={transcribing}>{v.skip}</button>

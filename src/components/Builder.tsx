@@ -7,6 +7,7 @@ import { cvToText } from '../lib/cvText';
 import { ACCENTS, FONTS, TEMPLATES, cvLang, getDesign } from '../lib/design';
 import { WEAK_FIXES } from '../lib/dictionaries';
 import { downloadBlob, savePdf } from '../lib/download';
+import { useFeatures } from '../lib/features';
 import { emptyCV, sampleCV, uid } from '../lib/sample';
 import { hasContent } from '../lib/cvParser';
 import { useSpellChecker } from '../lib/spell';
@@ -109,6 +110,7 @@ function BulletHints({ text, repeated, onChange }: { text: string; repeated: Set
 
 export default function Builder({ cv, setCv, jobDescription, setJobDescription, importNotice, onDismissNotice, onImported, onOpenInterview }: Props) {
   const { t, lang: uiLang } = useI18n();
+  const { features } = useFeatures();
   const b = t.builder;
   const [busy, setBusy] = useState(false);
   const [showText, setShowText] = useState(false);
@@ -514,7 +516,9 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
             <button type="button" className="add" onClick={projects.add}>{b.addProject}</button>
           </Panel>
 
-          {/* Anything the fixed sections do not cover — awards, volunteering, publications, memberships. */}
+          {/* Anything the fixed sections do not cover — awards, volunteering, publications, memberships.
+              Switched off, the panel goes away but any sections already in the CV are still exported. */}
+          {features.extras && (
           <Panel title={b.extras} count={extras.items.length} defaultOpen={false}>
             <p className="muted small-note">{b.extrasHint}</p>
             {extras.items.map((x) => (
@@ -528,6 +532,7 @@ export default function Builder({ cv, setCv, jobDescription, setJobDescription, 
             ))}
             <button type="button" className="add" onClick={extras.add}>{b.addExtra}</button>
           </Panel>
+          )}
 
           <Panel title={b.languages} defaultOpen={false}>
             <Area label={b.languagesLabel} rows={2} value={cv.languages} onChange={(v) => set('languages', v)} placeholder={b.languagesPh} />

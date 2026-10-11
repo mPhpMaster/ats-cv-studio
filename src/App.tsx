@@ -5,6 +5,7 @@ import AiSettingsDialog from './components/AiSettingsDialog';
 import InterviewPage from './components/InterviewPage';
 import { I18nContext, messages } from './i18n';
 import { isDesktop } from './lib/download';
+import { FeaturesContext, OPEN_SETTINGS_EVENT, loadFeatures, saveFeatures, type Features } from './lib/features';
 import { sampleCV } from './lib/sample';
 import type { CVData, Lang } from './types';
 
@@ -43,6 +44,23 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   /** Bumped when an interview's result is applied, so the next visit to that tab begins a new interview. */
   const [interviewRun, setInterviewRun] = useState(0);
+  /** Everything added on top of the CV itself can be switched off; the choice is remembered. */
+  const [features, setFeatures] = useState<Features>(loadFeatures);
+  const featureCtx = useMemo(() => ({
+    features,
+    setFeature: (key: keyof Features, on: boolean) => setFeatures((f) => {
+      const next = { ...f, [key]: on };
+      saveFeatures(next);
+      return next;
+    }),
+  }), [features]);
+
+  // The interview points at the settings when the microphone cannot work, from outside this component.
+  useEffect(() => {
+    const open = () => setSettingsOpen(true);
+    window.addEventListener(OPEN_SETTINGS_EVENT, open);
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open);
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -60,6 +78,7 @@ export default function App() {
 
   return (
     <I18nContext.Provider value={i18n}>
+      <FeaturesContext.Provider value={featureCtx}>
       <div className="app">
         <header className="topbar no-print">
           <div className="brand">
@@ -80,12 +99,10 @@ export default function App() {
               🗨 {t.interview.tab}
             </button>
           </nav>
-          {/* Desktop only: the settings are written to a file on this computer, which the web build has no access to. */}
-          {isDesktop() && (
-            <button className="lang-switch" onClick={() => setSettingsOpen(true)} title={t.ai.settingsTitle}>
-              ⚙ {t.ai.openSettings}
-            </button>
-          )}
+          {/* Always available: the AI connection needs the desktop app, but the feature switches do not. */}
+          <button className="lang-switch" onClick={() => setSettingsOpen(true)} title={t.ai.settingsTitle}>
+            ⚙ {isDesktop() ? t.ai.openSettings : t.features.title}
+          </button>
           <button className="lang-switch" onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')} lang={lang === 'ar' ? 'en' : 'ar'}>
             {t.switchLabel}
           </button>
@@ -115,15 +132,18 @@ export default function App() {
         </div>
         {/* One quiet line, shown once at the bottom and never as a popup: this app is used by people looking for
             work, so a repeated donation prompt would be the wrong thing to put in front of them. */}
-        <footer className="app-footer no-print">
-          <span className="muted">{t.app.supportNote}</span>
-          <button className="link" title={t.app.supportTitle}
-            onClick={() => window.open(DONATE_URL, '_blank', 'noopener')}>
-            ☕ {t.app.support} ↗
-          </button>
-        </footer>
+        {features.donate && (
+          <footer className="app-footer no-print">
+            <span className="muted">{t.app.supportNote}</span>
+            <button className="link" title={t.app.supportTitle}
+              onClick={() => window.open(DONATE_URL, '_blank', 'noopener')}>
+              ☕ {t.app.support} ↗
+            </button>
+          </footer>
+        )}
         {settingsOpen && <AiSettingsDialog onClose={() => setSettingsOpen(false)} />}
       </div>
+      </FeaturesContext.Provider>
     </I18nContext.Provider>
   );
 }

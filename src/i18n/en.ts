@@ -179,6 +179,8 @@ export const en = {
     providerSaid: 'The provider said:',
     getKey: 'Get an API key',
     otherModel: 'Other (type a name)…',
+    voiceModelLabel: 'Voice model',
+    desktopOnly: 'The AI connection settings live in the desktop app, because the key is stored in a file on your own computer.',
     refreshModels: 'Refresh model list',
     modelsLoading: 'Asking the provider…',
     modelsFound: (n: number) => `Your provider offers ${plural(n, 'model', 'models')}.`,
@@ -444,6 +446,14 @@ export const en = {
   },
 
   /** Headings printed inside the CV itself (chosen by the CV language, not the UI language). */
+  features: {
+    title: 'Features',
+    intro: 'Switch off anything you would rather not have. Your CV and its data are never affected.',
+    donate: 'Donation link at the bottom of the window',
+    voice: 'Voice answers in the interview (microphone button)',
+    extras: 'Additional sections in the builder',
+  },
+
   cv: {
     yourName: 'Your Name',
     nationality: 'Nationality',

@@ -1,0 +1,23 @@
+name: CI
+
+# Typecheck, build and test every push and pull request, so a change that breaks one of them is caught here
+# rather than in a release.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Also proves src/i18n/ar.ts and src/i18n/en.ts still match key for key: ar.ts is typed against en.ts.
+      - run: npm run build
+      # Every suite is offline against a local mock: no API key and no network are needed.
+      - run: npm test
