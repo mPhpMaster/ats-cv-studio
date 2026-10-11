@@ -12,6 +12,9 @@ export const en = {
     subtitle: 'Build and verify ATS-friendly CVs',
     tabBuild: 'Build CV',
     tabCheck: 'Check ATS compatibility',
+    supportNote: 'Free and open source.',
+    support: 'Buy me a coffee',
+    supportTitle: 'Optional — nothing here is paywalled, and a tip buys no features or support',
   },
 
   builder: {

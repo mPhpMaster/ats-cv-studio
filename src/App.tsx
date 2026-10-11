@@ -10,6 +10,9 @@ import type { CVData, Lang } from './types';
 
 type Tab = 'build' | 'check' | 'interview';
 
+/** Opens in the real browser: the main process turns every window.open into shell.openExternal. */
+const DONATE_URL = 'https://paypal.me/mfsafadi';
+
 function usePersistent<T>(key: string, initial: () => T) {
   const [value, setValue] = useState<T>(() => {
     try {
@@ -110,6 +113,15 @@ export default function App() {
           <InterviewPage key={interviewRun} cv={cv} jobDescription={jobDescription} active={tab === 'interview'}
             onApplied={(next, source) => { openInBuilder(next, source); setInterviewRun((n) => n + 1); }} />
         </div>
+        {/* One quiet line, shown once at the bottom and never as a popup: this app is used by people looking for
+            work, so a repeated donation prompt would be the wrong thing to put in front of them. */}
+        <footer className="app-footer no-print">
+          <span className="muted">{t.app.supportNote}</span>
+          <button className="link" title={t.app.supportTitle}
+            onClick={() => window.open(DONATE_URL, '_blank', 'noopener')}>
+            ☕ {t.app.support} ↗
+          </button>
+        </footer>
         {settingsOpen && <AiSettingsDialog onClose={() => setSettingsOpen(false)} />}
       </div>
     </I18nContext.Provider>

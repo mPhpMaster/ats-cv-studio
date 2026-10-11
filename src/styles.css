@@ -50,6 +50,17 @@ html[lang='ar'] h4 { letter-spacing: 0; text-transform: none; font-size: 13px; }
 ::selection { background: var(--accent-soft); }
 
 /* ---------- Top bar ---------- */
+/* Deliberately plain and last on the page: a thank-you, not a call to action. */
+.app-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-block: 18px 24px;
+  font-size: 13px;
+}
+
 .topbar {
   position: sticky; top: 0; z-index: 20;
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;

@@ -97,6 +97,14 @@ Contributions are welcome — issues and pull requests both. Two things worth kn
 - `src/i18n/ar.ts` is typed against `src/i18n/en.ts`, so the two must stay key-for-key identical or the build fails.
 - Run `npx tsc -b` before opening a pull request.
 
+## Support
+
+ATS CV Studio is free and open source, and stays that way. If it helped you land an interview and you would like to
+say thanks, you can send a tip: **[paypal.me/mfsafadi](https://paypal.me/mfsafadi)**.
+
+It is entirely optional. Nothing in the app is paywalled, a tip buys no features and no support obligation, and
+reporting a bug or sending a pull request is just as welcome.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
