@@ -3,7 +3,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { importLinkedInProfile } = require('./linkedin.cjs');
-const { callAi, transcribeAudio, readSettings, writeSettings, publicSettings, voiceConfig } = require('./aiClient.cjs');
+const { callAi, transcribeAudio, listModels, readSettings, writeSettings, publicSettings, voiceConfig } = require('./aiClient.cjs');
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 const FILTERS = {
@@ -126,6 +126,14 @@ ipcMain.handle('ai-transcribe', async (_event, { audio, mimeType, language }) =>
     mimeType: String(mimeType ?? ''),
     language: String(language ?? ''),
   });
+});
+
+// Asks the provider itself which models it accepts, so a retired name is never left in front of the user.
+// Voice has its own credentials, hence the kind.
+ipcMain.handle('ai-models', async (_event, { kind } = {}) => {
+  const settings = readSettings(app.getPath('userData'));
+  const creds = kind === 'stt' ? voiceConfig(settings) : settings;
+  return listModels({ ...creds, kind: kind === 'stt' ? 'stt' : 'chat' });
 });
 
 // Multi-turn version: the whole conversation is sent each time, so the assistant remembers its own questions.

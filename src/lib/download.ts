@@ -17,6 +17,8 @@ interface DesktopBridge {
   aiChat?(messages: AiMessage[]): Promise<AiCompletion>;
   /** Sends recorded audio (base64) to the provider's speech-to-text endpoint and returns what was said. */
   aiTranscribe?(audio: string, mimeType: string, language: string): Promise<AiCompletion>;
+  /** Asks the provider which models it currently accepts, so a retired name is never offered. */
+  aiModels?(kind?: 'chat' | 'stt'): Promise<AiModelList>;
 }
 
 export type AiProvider = 'anthropic' | 'openai' | 'google' | 'deepseek' | 'custom';
@@ -62,6 +64,10 @@ export interface AiSettingsPatch {
 
 export type AiCompletion =
   | { ok: true; text: string }
+  | { ok: false; error: string; message?: string };
+
+export type AiModelList =
+  | { ok: true; models: string[] }
   | { ok: false; error: string; message?: string };
 
 declare global {

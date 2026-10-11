@@ -295,6 +295,73 @@ async function callAi(options, fetchImpl) {
  * "error: network". Instead the audio goes to the provider the user already configured — where that provider
  * offers transcription at all.
  */
+/**
+ * Which model names the provider will actually accept today. Hardcoded lists rot: Google retired 2.0-flash and
+ * then 2.5-flash while this app named them, and every wrong name costs the user a failed request to find out.
+ * `kind` separates chat models from transcription ones, because the same account offers both.
+ */
+async function listModels(options, fetchImpl) {
+  const doFetch = fetchImpl || globalThis.fetch;
+  const provider = options && PROVIDERS[options.provider] ? options.provider : '';
+  if (!provider) return { ok: false, error: 'bad-provider' };
+
+  const apiKey = trim(options.apiKey);
+  const base = endpointFor(provider, options.baseUrl);
+  const kind = options.kind === 'stt' ? 'stt' : 'chat';
+  if (!base) return { ok: false, error: 'no-base-url' };
+  if (!endpointAllowed(base)) return { ok: false, error: 'bad-base-url' };
+  if (provider !== 'custom' && !apiKey) return { ok: false, error: 'no-key' };
+
+  const { url, headers } = provider === 'anthropic'
+    ? { url: `${base}/v1/models?limit=1000`, headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' } }
+    : provider === 'google'
+      ? { url: `${base}/v1beta/models?pageSize=1000`, headers: { 'x-goog-api-key': apiKey } }
+      // openai, deepseek and custom share the OpenAI listing shape.
+      : { url: `${base}/v1/models`, headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {} };
+
+  let res;
+  try {
+    res = await doFetch(url, { method: 'GET', headers });
+  } catch (e) {
+    return { ok: false, error: 'network', message: scrub(e && e.message ? e.message : e, apiKey) };
+  }
+  if (!res.ok) {
+    let detail = '';
+    try { detail = await res.text(); } catch { /* empty body */ }
+    const reason = providerMessage(detail);
+    return { ok: false, error: classifyFailure(res.status, reason), message: scrub(`${res.status} ${reason}`, apiKey) };
+  }
+
+  let data = null;
+  try { data = await res.json(); } catch { return { ok: false, error: 'bad-response' }; }
+  const models = modelNames(provider, data, kind);
+  return models.length ? { ok: true, models } : { ok: false, error: 'no-models' };
+}
+
+/** Everything an account can list that is NOT a chat model: embeddings, images, speech, moderation, old bases. */
+const NOT_CHAT = /embed|moderation|tts|audio|whisper|transcribe|dall-e|image|vision-preview|realtime|babbage|davinci|curie|ada|aqa|veo|imagen|gemma|learnlm|guard/i;
+/** Transcription models, by the names the providers actually use. */
+const IS_STT = /whisper|transcribe|speech-to-text/i;
+
+function modelNames(provider, data, kind) {
+  const raw = provider === 'google'
+    ? (Array.isArray(data.models) ? data.models : [])
+      // Only models that can answer a prompt at all; the list also carries embedding and image models.
+      .filter((m) => !Array.isArray(m.supportedGenerationMethods) || m.supportedGenerationMethods.includes('generateContent'))
+      .map((m) => String(m.name ?? '').replace(/^models\//, ''))
+    : (Array.isArray(data.data) ? data.data : []).map((m) => String((m && m.id) ?? ''));
+
+  const names = [...new Set(raw.filter(Boolean))];
+  // Google transcribes with its ordinary models, so its chat list doubles as its speech list.
+  const wanted = kind === 'stt' && provider !== 'google'
+    ? names.filter((n) => IS_STT.test(n))
+    : names.filter((n) => !NOT_CHAT.test(n) || (provider === 'google' && kind === 'stt'));
+  const list = wanted.length ? wanted : names;
+  // The provider's own default first, then the rest newest-looking first (names sort that way in practice).
+  const preset = PROVIDERS[provider][kind === 'stt' ? 'sttModel' : 'model'];
+  return list.sort((a, b) => (a === preset ? -1 : b === preset ? 1 : b.localeCompare(a)));
+}
+
 async function transcribeAudio(options, fetchImpl) {
   const doFetch = fetchImpl || globalThis.fetch;
   const provider = options && PROVIDERS[options.provider] ? options.provider : '';
@@ -366,6 +433,7 @@ async function transcribeAudio(options, fetchImpl) {
 module.exports = {
   callAi,
   transcribeAudio,
+  listModels,
   readSettings,
   writeSettings,
   publicSettings,

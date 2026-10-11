@@ -61,6 +61,10 @@ export default function AiSettingsDialog({ onClose }: Props) {
   const [voiceKeyInput, setVoiceKeyInput] = useState('');
   const [savedFlash, setSavedFlash] = useState(false);
   const [typeOwnModel, setTypeOwnModel] = useState(false);
+  /** Model names fetched from the provider itself; null until asked, and dropped when the provider changes. */
+  const [fetchedModels, setFetchedModels] = useState<string[] | null>(null);
+  const [modelsNote, setModelsNote] = useState('');
+  const [loadingModels, setLoadingModels] = useState(false);
 
   useEffect(() => {
     window.desktop?.aiSettingsGet?.().then(setSettings).catch(() => setSettings(null));
@@ -92,16 +96,42 @@ export default function AiSettingsDialog({ onClose }: Props) {
 
   const provider: AiProvider = settings?.provider ?? 'anthropic';
   const voiceProvider: AiVoiceProvider | '' = settings?.voiceProvider ?? '';
-  const modelList = MODELS[provider];
+  const modelList = fetchedModels ?? MODELS[provider];
   const savedModel = settings?.model ?? '';
   /** A model already saved but absent from the list (e.g. a newer one) keeps the free-text box open. */
   const unlistedModel = Boolean(savedModel) && !modelList.includes(savedModel);
   const typedModel = provider === 'custom' || typeOwnModel || unlistedModel;
   const selectedModel = savedModel || settings?.defaultModel || modelList[0] || '';
 
+  /** The provider's own answer beats any list shipped in this app, which goes stale as models are retired. */
+  async function loadModels() {
+    if (typeof window.desktop?.aiModels !== 'function') return;
+    setLoadingModels(true);
+    setModelsNote('');
+    try {
+      const res = await window.desktop.aiModels('chat');
+      if (res.ok) {
+        setFetchedModels(res.models);
+        setTypeOwnModel(false);
+        setModelsNote(a.modelsFound(res.models.length));
+      } else {
+        setModelsNote((a.aiErrors as Record<string, string>)[res.error] ?? a.aiErrors.http);
+      }
+    } catch {
+      setModelsNote(a.aiErrors.http);
+    } finally {
+      setLoadingModels(false);
+    }
+  }
+
   async function save(patch: Partial<AiSettingsPatch>) {
-    // Switching provider resets the model in the main process, so drop back to its picker too.
-    if (patch.provider) setTypeOwnModel(false);
+    // Switching provider resets the model in the main process, so drop back to its picker too — and a list
+    // fetched from the old provider must not be offered for the new one.
+    if (patch.provider) {
+      setTypeOwnModel(false);
+      setFetchedModels(null);
+      setModelsNote('');
+    }
     const next = await window.desktop!.aiSettingsSet!(patch);
     setSettings(next);
     if (patch.apiKey !== undefined) setKeyInput('');
@@ -165,6 +195,13 @@ export default function AiSettingsDialog({ onClose }: Props) {
                 </select>
               )}
             </label>
+            {/* The provider is the only authority on which of its models still work. */}
+            <div className="row-actions">
+              <button type="button" onClick={loadModels} disabled={loadingModels}>
+                {loadingModels ? a.modelsLoading : `↻ ${a.refreshModels}`}
+              </button>
+              {modelsNote && <span className="muted small-note">{modelsNote}</span>}
+            </div>
             {provider === 'custom' && (
               <label className="field">
                 <span>{a.endpoint}</span>

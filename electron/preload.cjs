@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('desktop', {
   aiComplete: (prompt) => ipcRenderer.invoke('ai-complete', { prompt }),
   aiChat: (messages) => ipcRenderer.invoke('ai-chat', { messages }),
   aiTranscribe: (audio, mimeType, language) => ipcRenderer.invoke('ai-transcribe', { audio, mimeType, language }),
+  aiModels: (kind) => ipcRenderer.invoke('ai-models', { kind }),
   onLinkedinProgress: (callback) => {
     const handler = (_event, update) => callback(update);
     ipcRenderer.on('linkedin-progress', handler);
